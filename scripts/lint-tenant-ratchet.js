@@ -36,7 +36,12 @@ const path = require('path');
 //        proposals, service_packages, ref_sequences) carry no tenant_id.
 //        Conscious add; if this fork ever joins the multi-tenant migration,
 //        the Sightline CRM cluster migrates as one unit.
-const BASELINE = 171;
+//   177  2026-08-17  +Sightline Phase 2 delivery cluster (routes/
+//        deliverables, approvals, variations, client-inputs,
+//        correspondence, time + lib/deliverableStatus, wip). Same
+//        single-tenant conscious add as Phase 1; the delivery cluster
+//        migrates with the CRM cluster if multi-tenancy ever lands here.
+const BASELINE = 177;
 
 // spawnSync (not execFileSync): check-raw-db exits 1 while violations exist,
 // and the JSON must still be read off stdout without an exception path.

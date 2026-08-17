@@ -90,6 +90,95 @@ const NEEDS_ROWS = [
     },
   },
   {
+    // Client-caused delivery risk (brief §5.10 / §10.1) — inputs past their
+    // needed-by date while the project waits. The loudest Phase 2 row.
+    key: 'client_inputs_overdue', gate: 'projects', priority: 12, tone: 'critical', href: '/client-inputs?view=overdue',
+    build(db, user, today) {
+      const r = db.prepare(`
+        SELECT COUNT(*) AS c, MIN(ci.needed_by) AS oldest
+        FROM client_inputs ci JOIN jobs j ON ci.job_id = j.id
+        WHERE ci.status IN ('requested','inadequate') AND ci.needed_by IS NOT NULL
+          AND ci.needed_by < ? AND j.status NOT IN ('closed','cancelled')
+      `).get(today);
+      return {
+        count: r.c,
+        label: r.c === 1 ? 'client input overdue' : 'client inputs overdue',
+        detail: r.oldest ? 'oldest ' + formatDateShortAU(r.oldest) : '',
+      };
+    },
+  },
+  {
+    // Deliverables due within 3 days or overdue (brief §5.3).
+    key: 'delivery_due', gate: 'projects', priority: 19, tone: 'warn', href: '/deliverables?due=overdue',
+    build(db, user, today) {
+      const r = db.prepare(`
+        SELECT
+          SUM(CASE WHEN COALESCE(d.internal_due_date, d.external_due_date) < ? THEN 1 ELSE 0 END) AS overdue,
+          COUNT(*) AS c
+        FROM deliverables d JOIN jobs j ON d.job_id = j.id
+        WHERE d.status NOT IN ('issued','closed','superseded')
+          AND j.status NOT IN ('closed','cancelled')
+          AND (
+            (d.internal_due_date IS NOT NULL AND d.internal_due_date <= date(?, '+3 days')) OR
+            (d.external_due_date IS NOT NULL AND d.external_due_date <= date(?, '+3 days'))
+          )
+      `).get(today, today, today);
+      return {
+        count: r.c,
+        label: r.c === 1 ? 'deliverable due' : 'deliverables due',
+        detail: r.overdue > 0 ? `${r.overdue} overdue` : 'within 3 days',
+        tone: r.overdue > 0 ? 'critical' : undefined,
+      };
+    },
+  },
+  {
+    // Authority approvals needing attention: awaiting info, past their
+    // requested decision date, or expiring within the config window (§5.7).
+    key: 'approvals_attention', gate: 'projects', priority: 21, tone: 'warn', href: '/approvals?view=pending',
+    build(db, user, today) {
+      const info = db.prepare("SELECT COUNT(*) AS c FROM approvals a JOIN jobs j ON a.job_id = j.id WHERE a.status = 'info_requested' AND j.status NOT IN ('closed','cancelled')").get().c;
+      const past = db.prepare("SELECT COUNT(*) AS c FROM approvals a JOIN jobs j ON a.job_id = j.id WHERE a.status = 'submitted' AND a.requested_date IS NOT NULL AND a.requested_date < ? AND j.status NOT IN ('closed','cancelled')").get(today).c;
+      const expiring = db.prepare("SELECT COUNT(*) AS c FROM approvals a JOIN jobs j ON a.job_id = j.id WHERE a.status = 'approved' AND a.expiry_date IS NOT NULL AND a.expiry_date <= date(?, '+30 days') AND j.status NOT IN ('closed','cancelled')").get(today).c;
+      return {
+        count: info + past + expiring,
+        label: 'approvals need attention',
+        detail: [info ? `${info} awaiting info` : '', expiring ? `${expiring} expiring` : ''].filter(Boolean).join(', '),
+      };
+    },
+  },
+  {
+    // Variations sitting submitted — money undecided (brief §5.8).
+    key: 'variations_pending', gate: 'projects', priority: 25, tone: 'warn', href: '/variations?status=submitted',
+    build(db) {
+      const r = db.prepare(`
+        SELECT COUNT(*) AS c, COALESCE(SUM(v.additional_fee), 0) AS value
+        FROM variations v JOIN jobs j ON v.job_id = j.id
+        WHERE v.approval_status = 'submitted' AND j.status NOT IN ('closed','cancelled')
+      `).get();
+      return {
+        count: r.c,
+        label: r.c === 1 ? 'variation awaiting decision' : 'variations awaiting decision',
+        detail: r.value > 0 ? '$' + Math.round(r.value).toLocaleString('en-AU') : '',
+      };
+    },
+  },
+  {
+    // Finance queue: packages marked ready and not yet invoiced (§10.1).
+    key: 'invoice_ready_queue', gate: 'budgets', priority: 30, tone: 'warn', href: '/budgets',
+    build(db) {
+      const r = db.prepare(`
+        SELECT COUNT(*) AS c, COALESCE(SUM(fee_allocation), 0) AS value
+        FROM service_packages
+        WHERE COALESCE(ready_for_invoice, 0) = 1 AND COALESCE(invoiced, 0) = 0
+      `).get();
+      return {
+        count: r.c,
+        label: r.c === 1 ? 'package ready to invoice' : 'packages ready to invoice',
+        detail: r.value > 0 ? '$' + Math.round(r.value).toLocaleString('en-AU') : '',
+      };
+    },
+  },
+  {
     key: 'overdue_plans', gate: 'compliance', priority: 10, tone: 'critical', href: '/compliance',
     build(db, user, today) {
       // Canonical overdue definition — submitted-inclusive, same as the

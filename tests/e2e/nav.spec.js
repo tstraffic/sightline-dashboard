@@ -44,7 +44,8 @@ test('Sightline destinations render; T&S modules are delisted', async ({ page })
 
   // CRM + Delivery + Money links render exactly once.
   for (const href of ['/clients', '/contacts', '/opportunities/pipeline', '/opportunities',
-    '/crm', '/crm/activities', '/crm/meetings', '/projects', '/budgets']) {
+    '/crm', '/crm/activities', '/crm/meetings', '/projects', '/service-packages',
+    '/deliverables', '/approvals', '/variations', '/time', '/budgets']) {
     await expect(sb(href)).toHaveCount(1);
   }
 

@@ -5,6 +5,7 @@ const { notificationEmail, dailyDigestEmail } = require('../services/emailTempla
 const notifPrefs = require('../lib/notificationPrefs');
 const { sendPushForNotifications, sendPushToUser } = require('../services/pushNotification');
 const { todaysBirthdays, localIso: bdayLocalIso } = require('../lib/birthdays');
+const { sydneyToday } = require('../lib/sydney');
 
 /**
  * Middleware that attaches unread notification count to res.locals for the header bell icon.
@@ -838,6 +839,155 @@ function generateNotifications() {
         }
       }
     } catch (e) { console.error('[notifications] won-unconverted step failed:', e.message); }
+
+    // ── Phase 2 delivery sweeps (brief §10.1). All windows are Sydney
+    //    dates; thresholds come from system_config so ops can tune them.
+    const p2Today = sydneyToday();
+    const p2Config = (key, dflt) => {
+      try {
+        const row = db.prepare('SELECT config_value FROM system_config WHERE config_key = ?').get(key);
+        return Math.max(1, parseInt(row && row.config_value, 10) || dflt);
+      } catch (e) { return dflt; }
+    };
+
+    // S5. Deliverables due — unresolved deliverables whose internal or
+    // external due date is within 3 days (or past). Preparer + Project
+    // Director, deduped by insertIfNew's 24h window.
+    try {
+      const soon = db.prepare(`
+        SELECT d.id, d.deliverable_ref, d.title, d.status, d.preparer_id,
+          d.internal_due_date, d.external_due_date,
+          j.id AS job_id, j.job_number, j.project_manager_id
+        FROM deliverables d JOIN jobs j ON d.job_id = j.id
+        WHERE d.status NOT IN ('issued','closed','superseded')
+          AND j.status NOT IN ('closed','cancelled')
+          AND (
+            (d.internal_due_date IS NOT NULL AND d.internal_due_date <= date(?, '+3 days')) OR
+            (d.external_due_date IS NOT NULL AND d.external_due_date <= date(?, '+3 days'))
+          )
+      `).all(p2Today, p2Today);
+      for (const d of soon) {
+        const due = [d.internal_due_date, d.external_due_date].filter(Boolean).sort()[0];
+        const overdue = due < p2Today;
+        const title = `${overdue ? 'Deliverable overdue' : 'Deliverable due'}: ${d.deliverable_ref}`;
+        const message = `"${d.title}" is ${d.status.replace(/_/g, ' ')} and ${overdue ? 'was due' : 'is due'} ${due} on ${d.job_number}.`;
+        const link = '/deliverables/' + d.id;
+        for (const uid of new Set([d.preparer_id, d.project_manager_id].filter(Boolean))) {
+          insertAndTrack(uid, 'deliverable_due', title, message, link, d.job_id);
+        }
+      }
+    } catch (e) { console.error('[notifications] deliverable-due step failed:', e.message); }
+
+    // S6. QA sitting still — a PREPARED revision older than qa_stale_days
+    // pokes its checker (else the Project Director); a CHECKED revision with
+    // comments closed pokes its approver the same way.
+    try {
+      const staleDays = p2Config('qa_stale_days', 3);
+      const stale = db.prepare(`
+        SELECT r.id, r.status, r.revision_label, r.checker_id, r.approver_id,
+          r.prepared_at, r.checked_at,
+          d.id AS deliverable_id, d.deliverable_ref, d.checker_id AS default_checker,
+          j.id AS job_id, j.job_number, j.project_manager_id
+        FROM deliverable_revisions r
+        JOIN deliverables d ON r.deliverable_id = d.id
+        JOIN jobs j ON d.job_id = j.id
+        WHERE j.status NOT IN ('closed','cancelled') AND (
+          (r.status = 'prepared' AND r.prepared_at IS NOT NULL AND DATE(r.prepared_at) <= date(?, '-' || ? || ' days')) OR
+          (r.status = 'checked' AND r.comments_closed = 1 AND r.checked_at IS NOT NULL AND DATE(r.checked_at) <= date(?, '-' || ? || ' days'))
+        )
+      `).all(p2Today, String(staleDays), p2Today, String(staleDays));
+      for (const r of stale) {
+        const waitingOnCheck = r.status === 'prepared';
+        const recipient = waitingOnCheck
+          ? (r.checker_id || r.default_checker || r.project_manager_id)
+          : (r.approver_id || r.project_manager_id);
+        if (!recipient) continue;
+        const title = `QA waiting: ${r.deliverable_ref} Rev ${r.revision_label}`;
+        const message = waitingOnCheck
+          ? `Rev ${r.revision_label} has sat prepared since ${String(r.prepared_at).slice(0, 10)} — it needs its check (${r.job_number}).`
+          : `Rev ${r.revision_label} is checked with comments closed since ${String(r.checked_at).slice(0, 10)} — it needs approval before it can issue (${r.job_number}).`;
+        insertAndTrack(recipient, 'qa_pending', title, message, '/deliverables/' + r.deliverable_id, r.job_id);
+      }
+    } catch (e) { console.error('[notifications] qa-pending step failed:', e.message); }
+
+    // S7. Authority approvals — submitted/info_requested nearing (or past)
+    // the requested decision date warn the responsible; approved permits
+    // nearing expiry warn responsible + Project Director.
+    try {
+      const warnDays = p2Config('approval_warning_days', 7);
+      const expiryDays = p2Config('approval_expiry_warning_days', 30);
+      const dueApprovals = db.prepare(`
+        SELECT a.id, a.approval_ref, a.approval_type, a.authority, a.status,
+          a.requested_date, a.responsible_id, j.id AS job_id, j.job_number
+        FROM approvals a JOIN jobs j ON a.job_id = j.id
+        WHERE a.status IN ('submitted','info_requested') AND a.requested_date IS NOT NULL
+          AND a.requested_date <= date(?, '+' || ? || ' days')
+          AND j.status NOT IN ('closed','cancelled')
+      `).all(p2Today, String(warnDays));
+      for (const a of dueApprovals) {
+        if (!a.responsible_id) continue;
+        const overdue = a.requested_date < p2Today;
+        const title = `${overdue ? 'Approval past requested date' : 'Approval decision approaching'}: ${a.approval_ref}`;
+        const message = `${a.approval_type}${a.authority ? ' (' + a.authority + ')' : ''} is ${a.status.replace(/_/g, ' ')}; decision was requested for ${a.requested_date} (${a.job_number}).${a.status === 'info_requested' ? ' The authority is waiting on information.' : ''}`;
+        insertAndTrack(a.responsible_id, 'approval_due', title, message, '/approvals/' + a.id + '/edit', a.job_id);
+      }
+      const expiring = db.prepare(`
+        SELECT a.id, a.approval_ref, a.approval_type, a.authority, a.expiry_date,
+          a.responsible_id, j.id AS job_id, j.job_number, j.project_manager_id
+        FROM approvals a JOIN jobs j ON a.job_id = j.id
+        WHERE a.status = 'approved' AND a.expiry_date IS NOT NULL
+          AND a.expiry_date <= date(?, '+' || ? || ' days')
+          AND j.status NOT IN ('closed','cancelled')
+      `).all(p2Today, String(expiryDays));
+      for (const a of expiring) {
+        const expired = a.expiry_date < p2Today;
+        const title = `${expired ? 'Approval EXPIRED' : 'Approval expiring'}: ${a.approval_ref}`;
+        const message = `${a.approval_type}${a.authority ? ' (' + a.authority + ')' : ''} ${expired ? 'expired' : 'expires'} ${a.expiry_date} (${a.job_number}). Renew or record the expiry.`;
+        for (const uid of new Set([a.responsible_id, a.project_manager_id].filter(Boolean))) {
+          insertAndTrack(uid, 'approval_expiring', title, message, '/approvals/' + a.id + '/edit', a.job_id);
+        }
+      }
+    } catch (e) { console.error('[notifications] approvals step failed:', e.message); }
+
+    // S8. Client inputs overdue (brief §5.10) — needed_by past while still
+    // requested/inadequate = client-caused delivery risk. Project Director.
+    try {
+      const overdueInputs = db.prepare(`
+        SELECT ci.id, ci.item, ci.needed_by, ci.status, ci.client_owner,
+          j.id AS job_id, j.job_number, j.project_manager_id
+        FROM client_inputs ci JOIN jobs j ON ci.job_id = j.id
+        WHERE ci.status IN ('requested','inadequate') AND ci.needed_by IS NOT NULL
+          AND ci.needed_by < ? AND j.status NOT IN ('closed','cancelled')
+      `).all(p2Today);
+      for (const ci of overdueInputs) {
+        if (!ci.project_manager_id) continue;
+        const title = `Client input overdue: ${ci.job_number}`;
+        const message = `"${ci.item}" was needed by ${ci.needed_by} and is still ${ci.status}${ci.client_owner ? ' (client owner: ' + ci.client_owner + ')' : ''}. Chase it and keep the evidence trail current — this is delivery risk.`;
+        insertAndTrack(ci.project_manager_id, 'client_input_overdue', title, message, '/client-inputs?job_id=' + ci.job_id, ci.job_id);
+      }
+    } catch (e) { console.error('[notifications] client-input step failed:', e.message); }
+
+    // S9. Variations waiting on a decision longer than variation_pending_days
+    // → admin/management (they're the deciders).
+    try {
+      const pendingDays = p2Config('variation_pending_days', 7);
+      const pendingVars = db.prepare(`
+        SELECT v.id, v.variation_ref, v.description, v.additional_fee, v.submitted_date,
+          j.id AS job_id, j.job_number
+        FROM variations v JOIN jobs j ON v.job_id = j.id
+        WHERE v.approval_status = 'submitted' AND v.submitted_date IS NOT NULL
+          AND v.submitted_date <= date(?, '-' || ? || ' days')
+          AND j.status NOT IN ('closed','cancelled')
+      `).all(p2Today, String(pendingDays));
+      const deciders = pendingVars.length ? db.prepare("SELECT id FROM users WHERE active = 1 AND LOWER(role) IN ('admin','management','finance')").all() : [];
+      for (const v of pendingVars) {
+        const title = `Variation awaiting decision: ${v.variation_ref}`;
+        const message = `"${v.description}" ($${(v.additional_fee || 0).toLocaleString('en-AU')}) on ${v.job_number} has been submitted since ${v.submitted_date}. Approve or reject it — the work shouldn't be absorbed undecided.`;
+        for (const u of deciders) {
+          insertAndTrack(u.id, 'variation_pending', title, message, '/variations/' + v.id + '/edit', v.job_id);
+        }
+      }
+    } catch (e) { console.error('[notifications] variation-pending step failed:', e.message); }
 
     // S10. Invoice-readiness prompt (brief §10.1) — a COMPLETED service
     // package that nobody has queued for invoicing (or invoiced) is
