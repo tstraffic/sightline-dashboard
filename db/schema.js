@@ -16083,6 +16083,42 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 356 error:', e.message); }
   }
 
+  // Migration 357: approvals register (brief §5.7) — permits and authority
+  // approvals (ROLs, council permits, TfNSW submissions), particularly for
+  // APR-stream work. Status app-enforced: not_submitted | submitted |
+  // info_requested | approved | rejected | expired.
+  if (!isMigrationApplied.get(357)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS approvals (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          approval_ref TEXT UNIQUE NOT NULL,
+          job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+          service_package_id INTEGER REFERENCES service_packages(id),
+          approval_type TEXT NOT NULL,
+          authority TEXT NOT NULL DEFAULT '',
+          responsible_id INTEGER REFERENCES users(id),
+          status TEXT NOT NULL DEFAULT 'not_submitted',
+          submission_date DATE,
+          requested_date DATE,
+          reference_number TEXT DEFAULT '',
+          info_request_notes TEXT DEFAULT '',
+          approval_date DATE,
+          expiry_date DATE,
+          conditions TEXT DEFAULT '',
+          sharepoint_url TEXT DEFAULT '',
+          created_by INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_approvals_job ON approvals(job_id);
+        CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status);
+      `);
+      recordMigration.run(357, 'Sightline approvals register');
+      console.log('Migration 357 applied: approvals table');
+    } catch (e) { console.error('Migration 357 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

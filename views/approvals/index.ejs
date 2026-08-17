@@ -1,0 +1,121 @@
+<% locals.currentPage = 'approvals' %>
+<%
+  const STATUS_BADGE = {
+    not_submitted: 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20',
+    submitted: 'bg-sky-50 text-sky-700 ring-1 ring-sky-600/20',
+    info_requested: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
+    approved: 'bg-teal-50 text-teal-700 ring-1 ring-teal-600/20',
+    rejected: 'bg-red-50 text-red-700 ring-1 ring-red-600/20',
+    expired: 'bg-slate-50 text-slate-500 ring-1 ring-slate-600/20',
+  };
+  function buildUrl(overrides) {
+    const q = Object.assign({}, filters, overrides);
+    const parts = Object.entries(q).filter(([, v]) => v).map(([k, v]) => k + '=' + encodeURIComponent(v));
+    return '/approvals' + (parts.length ? '?' + parts.join('&') : '');
+  }
+%>
+
+<%- include('../partials/page-header', {
+  eyebrow: 'Delivery',
+  title: 'Approvals',
+  subtitle: 'Permits and authority approvals — ROLs, council permits, TfNSW submissions — with due and expiry tracking (brief §5.7).',
+}) %>
+
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
+  <a href="<%= buildUrl({ view: '' }) %>" class="stat-card">
+    <p class="stat-card-label">Approvals</p>
+    <p class="stat-card-value <%= stats.total ? 'is-info' : 'is-muted' %>"><%= stats.total || 0 %></p>
+  </a>
+  <a href="<%= buildUrl({ view: 'pending' }) %>" class="stat-card">
+    <p class="stat-card-label">Pending</p>
+    <p class="stat-card-value <%= stats.pending ? 'is-info' : 'is-muted' %>"><%= stats.pending || 0 %></p>
+  </a>
+  <a href="<%= buildUrl({ view: 'awaiting_info' }) %>" class="stat-card <%= stats.awaiting_info ? 'accent-amber' : '' %>">
+    <p class="stat-card-label">Awaiting Info</p>
+    <p class="stat-card-value <%= stats.awaiting_info ? 'is-warn' : 'is-muted' %>"><%= stats.awaiting_info || 0 %></p>
+  </a>
+  <a href="<%= buildUrl({ view: 'due' }) %>" class="stat-card <%= stats.due ? 'accent-amber' : '' %>">
+    <p class="stat-card-label">Decision Due</p>
+    <p class="stat-card-value <%= stats.due ? 'is-warn' : 'is-muted' %>"><%= stats.due || 0 %></p>
+  </a>
+  <a href="<%= buildUrl({ view: 'expiring' }) %>" class="stat-card <%= stats.expiring ? 'accent-amber' : '' %>">
+    <p class="stat-card-label">Expiring</p>
+    <p class="stat-card-value <%= stats.expiring ? 'is-critical' : 'is-muted' %>"><%= stats.expiring || 0 %></p>
+  </a>
+</div>
+
+<form method="GET" action="/approvals" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-4 mb-5">
+  <div class="flex flex-wrap items-end gap-3">
+    <input type="hidden" name="view" value="<%= filters.view || '' %>">
+    <div class="flex-1 min-w-[180px]">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Search</label>
+      <input type="text" name="search" value="<%= filters.search || '' %>" placeholder="Ref, type, authority, project..."
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Status</label>
+      <select name="status" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <% statuses.forEach(s => { %>
+          <option value="<%= s %>" <%= filters.status === s ? 'selected' : '' %>><%= s.replace(/_/g, ' ').toUpperCase() %></option>
+        <% }) %>
+      </select>
+    </div>
+    <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Filter</button>
+    <a href="/approvals" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Clear</a>
+  </div>
+</form>
+
+<% if (!approvals.length) { %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-10 text-center">
+    <p class="text-gray-500 text-sm mb-1">No approvals match.</p>
+    <p class="text-gray-400 text-xs">Approvals are created from a project's Approvals tab.</p>
+  </div>
+<% } else { %>
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
+  <table class="min-w-full text-sm">
+    <thead>
+      <tr class="border-b border-gray-100">
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Approval</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Project</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:table-cell">Authority</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Responsible</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:table-cell">Submitted</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden xl:table-cell">Decision Due</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Expiry</th>
+        <th class="px-3 py-2.5 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+        <th class="px-3 py-2.5"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      <% approvals.forEach(a => { %>
+      <tr class="hover:bg-gray-50">
+        <td class="px-3 py-2.5">
+          <span class="font-mono text-xs font-bold text-gray-900"><%= a.approval_ref %></span>
+          <p class="text-gray-700 text-xs truncate max-w-[200px]"><%= a.approval_type %><%= a.reference_number ? ' · ' + a.reference_number : '' %></p>
+        </td>
+        <td class="px-3 py-2.5">
+          <a href="/jobs/<%= a.job_id %>#approvals" class="text-brand-600 hover:text-brand-700 text-xs font-medium hover:underline"><%= a.job_number %></a>
+        </td>
+        <td class="px-3 py-2.5 text-gray-600 text-xs hidden md:table-cell"><%= a.authority || '—' %></td>
+        <td class="px-3 py-2.5 text-gray-600 text-xs hidden lg:table-cell"><%= a.responsible_name || '—' %></td>
+        <td class="px-3 py-2.5 text-gray-500 text-xs tabular-nums hidden md:table-cell"><%= a.submission_date ? formatDateShort(a.submission_date) : '—' %></td>
+        <td class="px-3 py-2.5 text-gray-500 text-xs tabular-nums hidden xl:table-cell"><%= a.requested_date ? formatDateShort(a.requested_date) : '—' %></td>
+        <td class="px-3 py-2.5 text-gray-500 text-xs tabular-nums hidden lg:table-cell"><%= a.expiry_date ? formatDateShort(a.expiry_date) : '—' %></td>
+        <td class="px-3 py-2.5 text-center">
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= STATUS_BADGE[a.status] || STATUS_BADGE.not_submitted %>"><%= a.status.replace(/_/g, ' ').toUpperCase() %></span>
+        </td>
+        <td class="px-3 py-2.5 text-right">
+          <a href="/approvals/<%= a.id %>/edit" class="text-gray-400 hover:text-brand-600 text-xs font-medium">Edit</a>
+        </td>
+      </tr>
+      <% if (a.status === 'info_requested' && a.info_request_notes) { %>
+      <tr class="bg-amber-50/40">
+        <td colspan="9" class="px-3 py-1.5 text-xs text-amber-800"><span class="font-bold uppercase text-[9px] tracking-widest mr-2">Info requested</span><%= a.info_request_notes %></td>
+      </tr>
+      <% } %>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>

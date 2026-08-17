@@ -27,6 +27,7 @@ const PAGES = [
   '/jobs',
   '/service-packages',
   '/deliverables',
+  '/approvals',
   '/budgets',
   // Shared
   '/tasks',

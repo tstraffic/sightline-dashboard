@@ -238,6 +238,7 @@
     overview: null,
     packages: 'projects',
     deliverables: 'job_deliverables',
+    approvals: 'job_approvals',
     diary: 'planning_diary',      tasks: 'ops_tasks',
     plans: 'planning_plans',      'final-plans': 'job_final_plans',
     safety: 'job_safety',         timesheets: 'ops_timesheets',
@@ -266,6 +267,11 @@
     <a href="#deliverables" class="px-4 py-3 text-sm font-medium border-b-2 transition-colors
       text-gray-500 hover:text-gray-900 border-transparent hover:border-gray-300
       focus:text-brand-700 focus:border-brand-500" onclick="activateTab(this)">Deliverables<% if (typeof jobDeliverables !== 'undefined' && jobDeliverables.length) { %> <span class="text-[10px] text-gray-400">(<%= jobDeliverables.length %>)</span><% } %></a>
+    <% } %>
+    <% if (showTab('approvals')) { %>
+    <a href="#approvals" class="px-4 py-3 text-sm font-medium border-b-2 transition-colors
+      text-gray-500 hover:text-gray-900 border-transparent hover:border-gray-300
+      focus:text-brand-700 focus:border-brand-500" onclick="activateTab(this)">Approvals<% if (typeof jobApprovals !== 'undefined' && jobApprovals.length) { %> <span class="text-[10px] text-gray-400">(<%= jobApprovals.length %>)</span><% } %></a>
     <% } %>
     <% if (showTab('diary')) { %>
     <a href="#diary" data-tab="diary" class="px-4 py-3 text-sm font-medium border-b-2 transition-colors
@@ -1651,6 +1657,55 @@
               <td class="px-4 py-2.5 text-xs tabular-nums text-gray-500"><%= d.external_due_date || '—' %></td>
               <td class="px-4 py-2.5 text-xs tabular-nums text-gray-500"><%= d.latest_issue_date || '—' %></td>
               <td class="px-4 py-2.5 text-center"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= DELIV_BADGE[d.status] || DELIV_BADGE.draft %>"><%= d.status.replace(/_/g,' ').toUpperCase() %></span></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } %>
+    </div>
+  </div>
+  <% } %>
+
+  <!-- Approvals Tab (brief §5.7) -->
+  <% if (showTab('approvals')) { %>
+  <div id="approvals" class="tab-content">
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Approvals</h2>
+        <div class="flex items-center gap-3">
+          <a href="/approvals?job_id=<%= job.id %>" class="text-xs font-semibold text-gray-500 hover:text-brand-700">Register →</a>
+          <a href="/approvals/new?job_id=<%= job.id %>" class="text-xs font-semibold text-brand-600 hover:text-brand-700">+ New approval</a>
+        </div>
+      </div>
+      <% const alist = (typeof jobApprovals !== 'undefined' ? jobApprovals : []); %>
+      <% if (!alist.length) { %>
+        <p class="p-4 text-sm text-gray-400">No approvals tracked yet — ROLs, council permits and authority submissions live here.</p>
+      <% } else { %>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="border-b border-gray-100">
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ref</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Type / Authority</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Responsible</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Submitted</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Expiry</th>
+              <th class="px-4 py-2 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+              <th class="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <% const APPR_BADGE = { not_submitted:'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20', submitted:'bg-sky-50 text-sky-700 ring-1 ring-sky-600/20', info_requested:'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20', approved:'bg-teal-50 text-teal-700 ring-1 ring-teal-600/20', rejected:'bg-red-50 text-red-700 ring-1 ring-red-600/20', expired:'bg-slate-50 text-slate-500 ring-1 ring-slate-600/20' }; %>
+            <% alist.forEach(a => { %>
+            <tr class="hover:bg-gray-50">
+              <td class="px-4 py-2.5"><span class="font-mono text-xs font-bold text-gray-900"><%= a.approval_ref %></span></td>
+              <td class="px-4 py-2.5 text-gray-700 text-xs"><%= a.approval_type %><%= a.authority ? ' · ' + a.authority : '' %></td>
+              <td class="px-4 py-2.5 text-gray-600 text-xs"><%= a.responsible_name || '—' %></td>
+              <td class="px-4 py-2.5 text-gray-500 text-xs tabular-nums"><%= a.submission_date || '—' %></td>
+              <td class="px-4 py-2.5 text-gray-500 text-xs tabular-nums"><%= a.expiry_date || '—' %></td>
+              <td class="px-4 py-2.5 text-center"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= APPR_BADGE[a.status] || APPR_BADGE.not_submitted %>"><%= a.status.replace(/_/g,' ').toUpperCase() %></span></td>
+              <td class="px-4 py-2.5 text-right"><a href="/approvals/<%= a.id %>/edit" class="text-gray-400 hover:text-brand-600 text-xs font-medium">Open</a></td>
             </tr>
             <% }) %>
           </tbody>

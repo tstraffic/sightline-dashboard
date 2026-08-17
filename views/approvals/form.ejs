@@ -1,0 +1,143 @@
+<% locals.currentPage = 'approvals' %>
+<% const isEdit = approval !== null && typeof approval !== 'undefined' && approval %>
+
+<%- include('../partials/page-header', {
+  eyebrow: job.job_number + (job.project_name ? ' · ' + job.project_name : ''),
+  title: isEdit ? 'Edit ' + approval.approval_ref : 'New Approval',
+  subtitle: 'Permit / authority approval tracking — submissions, information requests, conditions and expiry (brief §5.7).',
+  actions: [{ label: 'Back to Approvals', href: '/approvals' + (job.id ? '?job_id=' + job.id : ''), style: 'secondary' }]
+}) %>
+
+<form method="POST" action="<%= isEdit ? '/approvals/' + approval.id : '/approvals' %>" class="space-y-5 max-w-3xl">
+  <%- include('../partials/csrf') %>
+  <% if (!isEdit) { %><input type="hidden" name="job_id" value="<%= job.id %>"><% } %>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Approval</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Type <span class="text-red-500">*</span></label>
+        <input type="text" name="approval_type" required value="<%= isEdit ? approval.approval_type : '' %>" placeholder="e.g. Road Occupancy Licence, Council s138 permit"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Authority</label>
+        <input type="text" name="authority" value="<%= isEdit ? (approval.authority || '') : '' %>" placeholder="e.g. TfNSW, City of Parramatta"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Responsible</label>
+        <select name="responsible_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">TBA</option>
+          <% users.forEach(u => { %>
+            <option value="<%= u.id %>" <%= (isEdit ? approval.responsible_id : (user && user.id)) == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Service Package</label>
+        <select name="service_package_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">None</option>
+          <% packages.forEach(p => { %>
+            <option value="<%= p.id %>" <%= isEdit && approval.service_package_id == p.id ? 'selected' : '' %>><%= p.package_ref %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Submission Date</label>
+        <input type="date" name="submission_date" value="<%= isEdit ? (approval.submission_date || '') : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Requested Decision Date</label>
+        <input type="date" name="requested_date" value="<%= isEdit ? (approval.requested_date || '') : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Authority Reference</label>
+        <input type="text" name="reference_number" value="<%= isEdit ? (approval.reference_number || '') : '' %>" placeholder="Their ref once assigned"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Expiry Date</label>
+        <input type="date" name="expiry_date" value="<%= isEdit ? (approval.expiry_date || '') : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Conditions</label>
+        <textarea name="conditions" rows="2" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= isEdit ? (approval.conditions || '') : '' %></textarea>
+      </div>
+      <% if (isEdit) { %>
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Information Request Notes</label>
+        <textarea name="info_request_notes" rows="2" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= approval.info_request_notes || '' %></textarea>
+      </div>
+      <% } %>
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">SharePoint Link</label>
+        <input type="url" name="sharepoint_url" value="<%= isEdit ? (approval.sharepoint_url || '') : '' %>" placeholder="…/05 Approvals/…"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between">
+    <% if (isEdit) { %>
+    <button type="submit" form="delete-approval" class="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-medium rounded-lg transition-colors">Delete</button>
+    <% } else { %><span></span><% } %>
+    <div class="flex items-center gap-3">
+      <a href="/approvals<%= job.id ? '?job_id=' + job.id : '' %>" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Cancel</a>
+      <button type="submit" class="px-6 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors"><%= isEdit ? 'Save' : 'Create Approval' %></button>
+    </div>
+  </div>
+</form>
+
+<% if (isEdit) { %>
+<!-- Status transitions -->
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 mt-5 max-w-3xl">
+  <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Status — currently <span class="text-brand-700"><%= approval.status.replace(/_/g,' ').toUpperCase() %></span></h2>
+  <div class="flex flex-wrap gap-2">
+    <% if (['not_submitted','info_requested'].includes(approval.status)) { %>
+    <form method="POST" action="/approvals/<%= approval.id %>/status"><%- include('../partials/csrf') %>
+      <input type="hidden" name="status" value="submitted">
+      <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Mark Submitted</button>
+    </form>
+    <% } %>
+    <% if (['submitted'].includes(approval.status)) { %>
+    <form method="POST" action="/approvals/<%= approval.id %>/status" class="flex items-end gap-2 flex-wrap"><%- include('../partials/csrf') %>
+      <input type="hidden" name="status" value="info_requested">
+      <input type="text" name="info_request_notes" required placeholder="What did the authority ask for?"
+        class="w-72 px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      <button type="submit" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-medium rounded-lg transition-colors">Info Requested</button>
+    </form>
+    <% } %>
+    <% if (['submitted','info_requested'].includes(approval.status)) { %>
+    <form method="POST" action="/approvals/<%= approval.id %>/status" class="flex items-end gap-2 flex-wrap"><%- include('../partials/csrf') %>
+      <input type="hidden" name="status" value="approved">
+      <input type="text" name="reference_number" value="<%= approval.reference_number || '' %>" placeholder="Authority ref"
+        class="w-40 px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+      <input type="date" name="expiry_date" value="<%= approval.expiry_date || '' %>" title="Expiry date"
+        class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      <button type="submit" class="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white text-sm font-medium rounded-lg transition-colors">Approved</button>
+    </form>
+    <form method="POST" action="/approvals/<%= approval.id %>/status" onsubmit="return confirm('Mark this approval rejected?')"><%- include('../partials/csrf') %>
+      <input type="hidden" name="status" value="rejected">
+      <button type="submit" class="px-4 py-2 bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 text-sm font-medium rounded-lg transition-colors">Rejected</button>
+    </form>
+    <% } %>
+    <% if (approval.status === 'approved') { %>
+    <form method="POST" action="/approvals/<%= approval.id %>/status" onsubmit="return confirm('Mark expired?')"><%- include('../partials/csrf') %>
+      <input type="hidden" name="status" value="expired">
+      <button type="submit" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-500 text-sm font-medium rounded-lg transition-colors">Expired</button>
+    </form>
+    <form method="POST" action="/approvals/<%= approval.id %>/status"><%- include('../partials/csrf') %>
+      <input type="hidden" name="status" value="submitted">
+      <button type="submit" class="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-500 text-sm font-medium rounded-lg transition-colors" title="Undo approval">Back to Submitted</button>
+    </form>
+    <% } %>
+  </div>
+</div>
+<form id="delete-approval" method="POST" action="/approvals/<%= approval.id %>/delete" onsubmit="return confirm('Delete this approval record?');">
+  <%- include('../partials/csrf') %>
+</form>
+<% } %>
