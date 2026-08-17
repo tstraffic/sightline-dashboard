@@ -8,12 +8,13 @@ function baseTemplate(title, bodyContent) {
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;padding:32px 16px;">
     <tr><td align="center">
       <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
-        <!-- Header — Aubergine ground, Drawing Paper wordmark, Brass descriptor (Brand v3.2 reversed lockup) -->
-        <tr><td style="background:#3E2632;padding:24px;border-radius:12px 12px 0 0;">
+        <!-- Header — Atomis product wordmark (the supplier brand, as on the
+             T&S deployment); the footer credits the Sightline entity. -->
+        <tr><td style="background:#0F1115;padding:24px;border-radius:12px 12px 0 0;">
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr>
-              <td style="color:#F8F6F2;font-size:24px;font-weight:500;letter-spacing:-0.02em;font-family:'Hanken Grotesk',-apple-system,sans-serif;">Sightline</td>
-              <td align="right" style="color:#C9A15A;font-size:11px;letter-spacing:0.24em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;">Traffic Engineers</td>
+              <td style="color:#F5F5F7;font-size:26px;font-weight:500;letter-spacing:-0.04em;font-family:Georgia,serif;">atomis</td>
+              <td align="right" style="color:#10B981;font-size:13px;font-style:italic;">simple systems. smarter business.</td>
             </tr>
           </table>
         </td></tr>
