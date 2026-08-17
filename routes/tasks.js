@@ -60,6 +60,30 @@ function getTaskOwnerNames(db, taskId) {
   } catch (e) { return []; }
 }
 
+// Who a waiting task is waiting on (brief §5.4) — validated here, never a
+// column CHECK. '' = not waiting on anyone.
+const WAITING_ON = ['client', 'authority', 'internal'];
+
+/**
+ * Filters applied identically to the list WHERE and the counts WHERE.
+ * ONE owner — a filter added here can't be present in the list but
+ * forgotten in the counts (the historical failure mode of this file).
+ * Returns the extended WHERE string; pushes params onto `params`.
+ */
+function applyCommonFilters(where, params, query, user) {
+  const { priority, division, job_id, task_type, waiting_on } = query;
+  if (priority && priority !== 'all') { where += ' AND t.priority = ?'; params.push(priority); }
+  if (division && division !== 'all') { where += ' AND t.division = ?'; params.push(division); }
+  if (job_id) { where += ' AND t.job_id = ?'; params.push(job_id); }
+  if (task_type && task_type !== 'all') { where += ' AND t.task_type = ?'; params.push(task_type); }
+  if (waiting_on && WAITING_ON.includes(waiting_on)) { where += ' AND t.waiting_on = ?'; params.push(waiting_on); }
+  // Hide soft-deleted tasks from all default listings
+  where += ' AND t.deleted_at IS NULL';
+  // Admin-division tasks are private to the admin team
+  where += hideAdminTasksSql(user);
+  return where;
+}
+
 // GET / — Main tasks view with tabs, counts, and filters
 router.get('/', (req, res) => {
   const db = getDb();
@@ -119,14 +143,7 @@ router.get('/', (req, res) => {
     baseWhere += ' AND (t.owner_id = ? OR t.id IN (SELECT task_id FROM task_owners WHERE user_id = ?) OR t.id IN (SELECT task_id FROM task_watchers WHERE user_id = ?))';
     params.push(owner, owner, owner);
   }
-  if (priority && priority !== 'all') { baseWhere += ' AND t.priority = ?'; params.push(priority); }
-  if (division && division !== 'all') { baseWhere += ' AND t.division = ?'; params.push(division); }
-  if (job_id) { baseWhere += ' AND t.job_id = ?'; params.push(job_id); }
-  if (task_type && task_type !== 'all') { baseWhere += ' AND t.task_type = ?'; params.push(task_type); }
-  // Hide soft-deleted tasks from all default listings
-  baseWhere += ' AND t.deleted_at IS NULL';
-  // Admin-division tasks are private to the admin team
-  baseWhere += hideAdminTasksSql(req.session.user);
+  baseWhere = applyCommonFilters(baseWhere, params, req.query, req.session.user);
 
   // Fetch tasks
   const tasks = db.prepare(`
@@ -186,12 +203,11 @@ router.get('/', (req, res) => {
     countWhere += ' AND (t.owner_id = ? OR t.id IN (SELECT task_id FROM task_owners WHERE user_id = ?) OR t.id IN (SELECT task_id FROM task_watchers WHERE user_id = ?))';
     countParams.push(owner, owner, owner);
   }
-  if (priority && priority !== 'all') { countWhere += ' AND t.priority = ?'; countParams.push(priority); }
-  if (division && division !== 'all') { countWhere += ' AND t.division = ?'; countParams.push(division); }
-  if (job_id) { countWhere += ' AND t.job_id = ?'; countParams.push(job_id); }
-  if (task_type && task_type !== 'all') { countWhere += ' AND t.task_type = ?'; countParams.push(task_type); }
-  countWhere += ' AND t.deleted_at IS NULL';
-  countWhere += hideAdminTasksSql(req.session.user);
+  // Waiting-pill counts ignore the waiting filter itself (like status tabs
+  // ignore the tab filter) but respect everything else.
+  const preCommonWhere = countWhere;
+  const preCommonParams = countParams.slice();
+  countWhere = applyCommonFilters(countWhere, countParams, req.query, req.session.user);
 
   const counts = db.prepare(`
     SELECT
@@ -203,6 +219,20 @@ router.get('/', (req, res) => {
       SUM(CASE WHEN t.status != 'complete' AND t.due_date < '${today}' THEN 1 ELSE 0 END) as overdue
     FROM tasks t WHERE ${countWhere}
   `).get(...countParams);
+
+  // Waiting Client / Waiting Authority / Waiting Internal Review (brief §5.4)
+  let waitingCounts = { client: 0, authority: 0, internal: 0 };
+  try {
+    const waitParams = preCommonParams.slice();
+    const waitWhere = applyCommonFilters(preCommonWhere, waitParams, { ...req.query, waiting_on: '' }, req.session.user);
+    waitingCounts = db.prepare(`
+      SELECT
+        SUM(CASE WHEN t.status != 'complete' AND t.waiting_on = 'client' THEN 1 ELSE 0 END) as client,
+        SUM(CASE WHEN t.status != 'complete' AND t.waiting_on = 'authority' THEN 1 ELSE 0 END) as authority,
+        SUM(CASE WHEN t.status != 'complete' AND t.waiting_on = 'internal' THEN 1 ELSE 0 END) as internal
+      FROM tasks t WHERE ${waitWhere}
+    `).get(...waitParams) || waitingCounts;
+  } catch (e) { /* waiting_on column may not exist pre-migration */ }
 
   // Reference data
   const jobs = db.prepare("SELECT id, job_number, client, project_name FROM jobs WHERE status NOT IN ('closed','completed','cancelled') ORDER BY job_number").all();
@@ -221,6 +251,7 @@ router.get('/', (req, res) => {
     jobs,
     users,
     counts: counts || { total: 0, not_started: 0, in_progress: 0, blocked: 0, complete: 0, overdue: 0 },
+    waitingCounts,
     deletedCount,
     today,
     filters: req.query,
@@ -333,11 +364,15 @@ router.post('/', (req, res) => {
     const primaryOwnerId = ownerIds[0] || null;
 
     const tenderId = b.tender_id ? (parseInt(b.tender_id, 10) || null) : null;
+    const waitingOn = WAITING_ON.includes(b.waiting_on) ? b.waiting_on : '';
+    const deliverableId = b.deliverable_id ? (parseInt(b.deliverable_id, 10) || null) : null;
+    const packageId = b.service_package_id ? (parseInt(b.service_package_id, 10) || null) : null;
     const result = db.prepare(`
-      INSERT INTO tasks (job_id, tender_id, division, title, description, owner_id, due_date, status, priority, task_type, notes, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO tasks (job_id, tender_id, division, title, description, owner_id, due_date, status, priority, task_type, notes, created_by, waiting_on, deliverable_id, service_package_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(jobId, tenderId, division, b.title, b.description || '', primaryOwnerId, b.due_date,
-      b.status || 'not_started', b.priority || 'medium', b.task_type || 'one_off', b.notes || '', req.session.user.id);
+      b.status || 'not_started', b.priority || 'medium', b.task_type || 'one_off', b.notes || '', req.session.user.id,
+      waitingOn, deliverableId, packageId);
 
     const newTaskId = result.lastInsertRowid;
 
@@ -660,11 +695,12 @@ router.post('/:id', (req, res) => {
     let division = b.division || 'ops';
     if (division === 'admin' && !isAdminRole(req.session.user)) division = existingTask.division || 'ops';
     const completedDate = b.status === 'complete' ? new Date().toISOString().split('T')[0] : null;
+    const updateWaitingOn = WAITING_ON.includes(b.waiting_on) ? b.waiting_on : '';
     db.prepare(`
       UPDATE tasks SET job_id=?, tender_id=?, division=?, title=?, description=?, owner_id=?, due_date=?,
-      status=?, priority=?, task_type=?, notes=?, completed_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
+      status=?, priority=?, task_type=?, notes=?, completed_date=?, waiting_on=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
     `).run(updateJobId, updateTenderId, division, b.title, b.description || '', primaryOwnerId, b.due_date,
-      b.status, b.priority, b.task_type || 'one_off', b.notes || '', completedDate, req.params.id);
+      b.status, b.priority, b.task_type || 'one_off', b.notes || '', completedDate, updateWaitingOn, req.params.id);
 
     // Sync task_owners junction table
     syncTaskOwners(db, parseInt(req.params.id), newOwnerIds);

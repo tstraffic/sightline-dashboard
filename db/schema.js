@@ -16206,6 +16206,27 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 359 error:', e.message); }
   }
 
+  // Migration 360: task waiting-views (brief §5.4) + delivery links.
+  // waiting_on ∈ ''|client|authority|internal is validated in routes/tasks.js
+  // — NEVER a column CHECK (migration-168 rebuild fragility). deliverable_id /
+  // service_package_id are seams for deliverable-linked tasks.
+  if (!isMigrationApplied.get(360)) {
+    try {
+      const taskCols = db.prepare('PRAGMA table_info(tasks)').all().map(c => c.name);
+      if (!taskCols.includes('waiting_on')) {
+        db.exec("ALTER TABLE tasks ADD COLUMN waiting_on TEXT DEFAULT ''");
+      }
+      if (!taskCols.includes('deliverable_id')) {
+        db.exec('ALTER TABLE tasks ADD COLUMN deliverable_id INTEGER REFERENCES deliverables(id)');
+      }
+      if (!taskCols.includes('service_package_id')) {
+        db.exec('ALTER TABLE tasks ADD COLUMN service_package_id INTEGER REFERENCES service_packages(id)');
+      }
+      recordMigration.run(360, 'Sightline task waiting-views + delivery links');
+      console.log('Migration 360 applied: tasks waiting_on + delivery link columns');
+    } catch (e) { console.error('Migration 360 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

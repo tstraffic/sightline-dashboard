@@ -459,19 +459,33 @@
           </div>
         </div>
 
-        <div>
-          <label class="tf-label">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/></svg>
-            Priority
-          </label>
-          <div class="tf-seg" role="radiogroup" aria-label="Priority">
-            <% (settingsOptions.task_priority || []).forEach((opt) => {
-                 const curPrio = isEdit ? task.priority : 'medium';
-                 const checked = curPrio === opt.key;
-            %>
-              <input type="radio" name="priority" id="priority-<%= opt.key %>" value="<%= opt.key %>" <%= checked ? 'checked' : '' %> <%= disabled %> class="p-<%= opt.key %>">
-              <label for="priority-<%= opt.key %>"><%= opt.label %></label>
-            <% }) %>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div>
+            <label class="tf-label">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/></svg>
+              Priority
+            </label>
+            <div class="tf-seg" role="radiogroup" aria-label="Priority">
+              <% (settingsOptions.task_priority || []).forEach((opt) => {
+                   const curPrio = isEdit ? task.priority : 'medium';
+                   const checked = curPrio === opt.key;
+              %>
+                <input type="radio" name="priority" id="priority-<%= opt.key %>" value="<%= opt.key %>" <%= checked ? 'checked' : '' %> <%= disabled %> class="p-<%= opt.key %>">
+                <label for="priority-<%= opt.key %>"><%= opt.label %></label>
+              <% }) %>
+            </div>
+          </div>
+          <div>
+            <label class="tf-label" for="waiting_on">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Waiting On
+            </label>
+            <select id="waiting_on" name="waiting_on" <%= disabled %> class="tf-select <%= disabled ? 'opacity-60 cursor-not-allowed' : '' %>">
+              <option value="" <%= !isEdit || !task.waiting_on ? 'selected' : '' %>>Not waiting on anyone</option>
+              <option value="client" <%= isEdit && task.waiting_on === 'client' ? 'selected' : '' %>>Waiting Client</option>
+              <option value="authority" <%= isEdit && task.waiting_on === 'authority' ? 'selected' : '' %>>Waiting Authority</option>
+              <option value="internal" <%= isEdit && task.waiting_on === 'internal' ? 'selected' : '' %>>Waiting Internal Review</option>
+            </select>
           </div>
         </div>
       </div>

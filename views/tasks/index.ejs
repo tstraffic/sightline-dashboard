@@ -11,6 +11,7 @@
     if (filters.division && filters.division !== 'all') p.push('division=' + encodeURIComponent(filters.division));
     if (filters.job_id) p.push('job_id=' + encodeURIComponent(filters.job_id));
     if (filters.task_type && filters.task_type !== 'all') p.push('task_type=' + encodeURIComponent(filters.task_type));
+    if (filters.waiting_on) p.push('waiting_on=' + encodeURIComponent(filters.waiting_on));
     return '/tasks' + (p.length ? '?' + p.join('&') : '');
   }
   function viewUrl(newView) {
@@ -23,6 +24,7 @@
     if (filters.division && filters.division !== 'all') p.push('division=' + encodeURIComponent(filters.division));
     if (filters.job_id) p.push('job_id=' + encodeURIComponent(filters.job_id));
     if (filters.task_type && filters.task_type !== 'all') p.push('task_type=' + encodeURIComponent(filters.task_type));
+    if (filters.waiting_on) p.push('waiting_on=' + encodeURIComponent(filters.waiting_on));
     return '/tasks' + (p.length ? '?' + p.join('&') : '');
   }
   function filterUrl(key, value) {
@@ -106,6 +108,8 @@
   const priorityLabels = { high: 'High', medium: 'Medium', low: 'Low' };
   const typeBadges = { daily: 'bg-amber-50 text-amber-700 ring-amber-200', weekly: 'bg-blue-50 text-blue-700 ring-blue-200', one_off: 'bg-gray-50 text-gray-600 ring-gray-200' };
   const typeLabels = { daily: 'Daily', weekly: 'Weekly', one_off: 'One-off' };
+  const waitingBadges = { client: 'bg-amber-50 text-amber-700 ring-amber-200', authority: 'bg-purple-50 text-purple-700 ring-purple-200', internal: 'bg-sky-50 text-sky-700 ring-sky-200' };
+  const waitingLabels = { client: 'Waiting Client', authority: 'Waiting Authority', internal: 'Waiting Internal' };
 
   // Initials helper
   function getInitials(name) {
@@ -226,6 +230,21 @@
     </a>
   </div>
 
+  <!-- Waiting-on pills (brief §5.4) — click toggles the filter -->
+  <% const wc = (typeof waitingCounts !== 'undefined' && waitingCounts) ? waitingCounts : { client: 0, authority: 0, internal: 0 }; %>
+  <div class="flex flex-wrap items-center gap-2 mb-4">
+    <span class="text-xs font-medium text-gray-400 uppercase tracking-wider mr-1">Waiting:</span>
+    <a href="<%= filterUrl('waiting_on', filters.waiting_on === 'client' ? '' : 'client') %>" class="inline-flex items-center px-3.5 py-1.5 rounded-full text-sm font-medium transition <%= filters.waiting_on === 'client' ? 'bg-amber-600 text-white shadow-sm' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50' %>">
+      Waiting Client <span class="ml-1.5 text-xs opacity-80"><%= wc.client || 0 %></span>
+    </a>
+    <a href="<%= filterUrl('waiting_on', filters.waiting_on === 'authority' ? '' : 'authority') %>" class="inline-flex items-center px-3.5 py-1.5 rounded-full text-sm font-medium transition <%= filters.waiting_on === 'authority' ? 'bg-purple-600 text-white shadow-sm' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50' %>">
+      Waiting Authority <span class="ml-1.5 text-xs opacity-80"><%= wc.authority || 0 %></span>
+    </a>
+    <a href="<%= filterUrl('waiting_on', filters.waiting_on === 'internal' ? '' : 'internal') %>" class="inline-flex items-center px-3.5 py-1.5 rounded-full text-sm font-medium transition <%= filters.waiting_on === 'internal' ? 'bg-sky-600 text-white shadow-sm' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50' %>">
+      Waiting Internal Review <span class="ml-1.5 text-xs opacity-80"><%= wc.internal || 0 %></span>
+    </a>
+  </div>
+
   <!-- Compact Filter Bar -->
   <form method="GET" action="/tasks" data-module="tasks" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 mb-6">
     <%- include('../partials/csrf') %>
@@ -262,6 +281,12 @@
         <option value="weekly" <%= filters.task_type === 'weekly' ? 'selected' : '' %>>Weekly</option>
         <option value="one_off" <%= filters.task_type === 'one_off' ? 'selected' : '' %>>One-off</option>
       </select>
+      <select name="waiting_on" class="text-sm bg-white border border-gray-300 text-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">Waiting: Anyone</option>
+        <option value="client" <%= filters.waiting_on === 'client' ? 'selected' : '' %>>Waiting Client</option>
+        <option value="authority" <%= filters.waiting_on === 'authority' ? 'selected' : '' %>>Waiting Authority</option>
+        <option value="internal" <%= filters.waiting_on === 'internal' ? 'selected' : '' %>>Waiting Internal Review</option>
+      </select>
       <select name="job_id" class="col-span-2 sm:col-span-1 text-sm bg-white border border-gray-300 text-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500">
         <option value="">All Projects</option>
         <% jobs.forEach(function(job) { %>
@@ -269,7 +294,7 @@
         <% }) %>
       </select>
       <div class="col-span-2 sm:col-span-1 flex items-center gap-2">
-        <% if (filters.priority || filters.division || filters.task_type || filters.job_id || (filters.owner && filters.owner !== 'me')) { %>
+        <% if (filters.priority || filters.division || filters.task_type || filters.job_id || filters.waiting_on || (filters.owner && filters.owner !== 'me')) { %>
           <a href="<%= tabUrl(activeTab) %>" class="text-sm text-gray-500 hover:text-red-500 transition">✕ Clear</a>
         <% } %>
       </div>
@@ -318,6 +343,9 @@
                   <div class="flex items-start gap-2 mb-2">
                     <input type="checkbox" class="bulk-checkbox mt-1 rounded bg-white border-gray-300 text-brand-500 focus:ring-brand-500 flex-shrink-0" value="<%= task.id %>">
                     <span class="mt-0.5 flex-shrink-0 inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold rounded-md ring-1 ring-inset uppercase tracking-wide <%= priorityBadges[task.priority] || priorityBadges.low %>" title="Priority"><%= priorityLabels[task.priority] || 'Low' %></span>
+                    <% if (task.waiting_on && task.status !== 'complete' && waitingBadges[task.waiting_on]) { %>
+                    <span class="mt-0.5 flex-shrink-0 inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold rounded-md ring-1 ring-inset uppercase tracking-wide <%= waitingBadges[task.waiting_on] %>" title="Waiting on"><%= waitingLabels[task.waiting_on] %></span>
+                    <% } %>
                     <div class="flex-1 min-w-0">
                       <a href="/tasks/<%= task.id %>/edit" class="text-sm font-semibold text-gray-900 hover:text-brand-600 transition line-clamp-2 block"><%= task.title %></a>
                       <% if (task.description) { %>
@@ -403,6 +431,9 @@
                   <div class="flex items-start gap-2 mb-2">
                     <input type="checkbox" class="bulk-checkbox mt-1 rounded bg-white border-gray-300 text-brand-500 focus:ring-brand-500 flex-shrink-0" value="<%= task.id %>">
                     <span class="mt-0.5 flex-shrink-0 inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold rounded-md ring-1 ring-inset uppercase tracking-wide <%= priorityBadges[task.priority] || priorityBadges.low %>" title="Priority"><%= priorityLabels[task.priority] || 'Low' %></span>
+                    <% if (task.waiting_on && task.status !== 'complete' && waitingBadges[task.waiting_on]) { %>
+                    <span class="mt-0.5 flex-shrink-0 inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold rounded-md ring-1 ring-inset uppercase tracking-wide <%= waitingBadges[task.waiting_on] %>" title="Waiting on"><%= waitingLabels[task.waiting_on] %></span>
+                    <% } %>
                     <div class="flex-1 min-w-0">
                       <a href="/tasks/<%= task.id %>/edit" class="text-sm font-semibold text-gray-900 hover:text-brand-600 transition line-clamp-2 block"><%= task.title %></a>
                       <% if (task.description) { %>
