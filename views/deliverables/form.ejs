@@ -1,0 +1,88 @@
+<% locals.currentPage = 'deliverables' %>
+
+<%- include('../partials/page-header', {
+  eyebrow: job.job_number + (job.project_name ? ' · ' + job.project_name : ''),
+  title: 'New Deliverable',
+  subtitle: 'The reference is minted from the type (report → RPT, drawing → DRG, letter → LTR, calculation → CAL, model → MOD).',
+  actions: [{ label: 'Back to Project', href: '/jobs/' + job.id + '#deliverables', style: 'secondary' }]
+}) %>
+
+<form method="POST" action="/deliverables" class="space-y-5 max-w-3xl">
+  <%- include('../partials/csrf') %>
+  <input type="hidden" name="job_id" value="<%= job.id %>">
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Deliverable</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Title <span class="text-red-500">*</span></label>
+        <input type="text" name="title" required placeholder="e.g. Traffic Impact Assessment"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Type <span class="text-red-500">*</span></label>
+        <select name="doc_type" required class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <% docTypes.forEach(t => { %>
+            <option value="<%= t %>"><%= t.charAt(0).toUpperCase() + t.slice(1) %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Service Package</label>
+        <select name="service_package_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">None</option>
+          <% packages.forEach(p => { %>
+            <option value="<%= p.id %>"><%= p.package_ref %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Internal Due (QA)</label>
+        <input type="date" name="internal_due_date" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Client Due</label>
+        <input type="date" name="external_due_date" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">QA Team (defaults for each revision)</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <% [['preparer_id','Preparer', job.project_manager_id], ['checker_id','Checker', job.checker_id || job.technical_lead_id], ['approver_id','Approver', job.technical_lead_id]].forEach(([name, label, def]) => { %>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1"><%= label %></label>
+        <select name="<%= name %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">TBA</option>
+          <% users.forEach(u => { %>
+            <option value="<%= u.id %>" <%= def == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <% }) %>
+    </div>
+    <p class="text-[10px] text-gray-400 mt-3">Only the assigned approver (or admin/management) can approve a revision, and only approved revisions can be issued.</p>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">SharePoint</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Working Folder URL</label>
+        <input type="url" name="sharepoint_working_url" placeholder="…/02 Working/…"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Issued Folder URL</label>
+        <input type="url" name="sharepoint_issued_url" placeholder="…/04 Issued/…"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-end gap-3">
+    <a href="/jobs/<%= job.id %>#deliverables" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Cancel</a>
+    <button type="submit" class="px-6 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Create Deliverable</button>
+  </div>
+</form>

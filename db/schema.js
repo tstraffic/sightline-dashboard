@@ -16003,6 +16003,86 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 355 seed error:', e.message); }
   }
 
+  // Migration 356: deliverables register (brief §5.3), per-revision QA
+  // (§5.6) and the append-only document issue register (§5.5).
+  // deliverables.status is a CACHED PROJECTION maintained by
+  // lib/deliverableStatus.js (draft|in_qa|approved|issued|superseded|closed,
+  // app-enforced — no CHECK, matching service_packages). document_issues is
+  // INSERT-only: it must always answer exactly what was issued, to whom
+  // and when, so no update/delete endpoints exist for it.
+  if (!isMigrationApplied.get(356)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS deliverables (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          deliverable_ref TEXT UNIQUE NOT NULL,
+          job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+          service_package_id INTEGER REFERENCES service_packages(id),
+          title TEXT NOT NULL,
+          doc_type TEXT NOT NULL DEFAULT 'report',
+          status TEXT NOT NULL DEFAULT 'draft',
+          preparer_id INTEGER REFERENCES users(id),
+          checker_id INTEGER REFERENCES users(id),
+          approver_id INTEGER REFERENCES users(id),
+          internal_due_date DATE,
+          external_due_date DATE,
+          issue_purpose TEXT DEFAULT '',
+          latest_issue_date DATE,
+          next_action TEXT DEFAULT '',
+          sharepoint_working_url TEXT DEFAULT '',
+          sharepoint_issued_url TEXT DEFAULT '',
+          created_by INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_deliverables_job ON deliverables(job_id);
+        CREATE INDEX IF NOT EXISTS idx_deliverables_status ON deliverables(status);
+
+        CREATE TABLE IF NOT EXISTS deliverable_revisions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          deliverable_id INTEGER NOT NULL REFERENCES deliverables(id) ON DELETE CASCADE,
+          revision_label TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'draft',
+          preparer_id INTEGER REFERENCES users(id),
+          prepared_at DATETIME,
+          checker_id INTEGER REFERENCES users(id),
+          checked_at DATETIME,
+          qa_comments TEXT DEFAULT '',
+          comments_closed INTEGER NOT NULL DEFAULT 0,
+          approver_id INTEGER REFERENCES users(id),
+          approved_at DATETIME,
+          evidence_link TEXT DEFAULT '',
+          file_path TEXT DEFAULT '',
+          created_by INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(deliverable_id, revision_label)
+        );
+        CREATE INDEX IF NOT EXISTS idx_deliv_revs ON deliverable_revisions(deliverable_id, id);
+
+        CREATE TABLE IF NOT EXISTS document_issues (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          deliverable_id INTEGER NOT NULL REFERENCES deliverables(id) ON DELETE CASCADE,
+          revision_id INTEGER NOT NULL REFERENCES deliverable_revisions(id),
+          issue_status TEXT NOT NULL DEFAULT 'issued',
+          issue_date DATE NOT NULL,
+          issue_purpose TEXT DEFAULT '',
+          issued_by_id INTEGER REFERENCES users(id),
+          issued_to TEXT NOT NULL,
+          transmittal_ref TEXT DEFAULT '',
+          superseded_revision_label TEXT DEFAULT '',
+          approved_by_id INTEGER REFERENCES users(id),
+          sharepoint_file_link TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_doc_issues_deliv ON document_issues(deliverable_id);
+      `);
+      recordMigration.run(356, 'Sightline deliverables + per-revision QA + append-only document issue register');
+      console.log('Migration 356 applied: deliverables trio');
+    } catch (e) { console.error('Migration 356 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

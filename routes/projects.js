@@ -489,6 +489,7 @@ router.get('/:id', (req, res) => {
   // the two URLs render the same template and must stay interchangeable).
   let servicePackages = [];
   let crmLinks = null;
+  let jobDeliverables = [];
   try {
     servicePackages = db.prepare(`
       SELECT sp.*, u.full_name AS owner_name FROM service_packages sp
@@ -499,6 +500,11 @@ router.get('/:id', (req, res) => {
       opportunity: job.opportunity_id ? db.prepare('SELECT id, opportunity_number, title FROM opportunities WHERE id = ?').get(job.opportunity_id) : null,
       proposal: job.proposal_id ? db.prepare('SELECT id, proposal_ref, fee, acceptance_reference FROM proposals WHERE id = ?').get(job.proposal_id) : null,
     };
+    jobDeliverables = db.prepare(`
+      SELECT d.*,
+        (SELECT r.revision_label FROM deliverable_revisions r WHERE r.deliverable_id = d.id ORDER BY r.id DESC LIMIT 1) AS current_revision
+      FROM deliverables d WHERE d.job_id = ? ORDER BY d.deliverable_ref
+    `).all(job.id);
   } catch (e) {
     console.error('[Projects] service packages/CRM links failed for job', job.id, ':', e.message);
   }
@@ -512,7 +518,7 @@ router.get('/:id', (req, res) => {
     complianceTgsItems, allUsers, diaryAttachments, chatMembers, activities,
     finalPlans, finalPlanDocs, finalTrafficPlans, planFlags, planRevisions, viewMode,
     swmsForJob, riskAssessmentsForJob, auditsForJob, safetyRollup,
-    servicePackages, crmLinks,
+    servicePackages, crmLinks, jobDeliverables,
     user: req.session.user,
     canViewAccounts: canViewAccounts(req.session.user)
   });

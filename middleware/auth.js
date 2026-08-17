@@ -158,6 +158,10 @@ const PERMISSIONS = {
   job_contacts:       ['admin', 'operations'],            // Contacts tab
   job_budget:         ['admin', 'operations', 'finance'], // Budget tab
   job_accounts:       ['admin', 'finance'],               // Accounts tab + accounts document library (canViewAccounts delegates here)
+  // Sightline Phase 2 job-detail tabs
+  job_deliverables:   ['admin', 'operations', 'planning', 'finance'], // Deliverables tab (QA + issue register)
+  job_approvals:      ['admin', 'operations', 'planning', 'finance'], // Approvals tab
+  job_inputs:         ['admin', 'operations', 'planning', 'finance'], // Client inputs + correspondence tab
 
   // ── Ops sidebar links (NOT job tabs) ──
   ops_final_plans:    ['admin', 'operations'],            // "Tasks Board" + "Job Pack" sidebar links (lib/sidebarNav.js) — widening this moves the sidebar/hubs too

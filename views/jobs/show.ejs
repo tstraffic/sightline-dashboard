@@ -237,6 +237,7 @@
   const TAB_PERMS = {
     overview: null,
     packages: 'projects',
+    deliverables: 'job_deliverables',
     diary: 'planning_diary',      tasks: 'ops_tasks',
     plans: 'planning_plans',      'final-plans': 'job_final_plans',
     safety: 'job_safety',         timesheets: 'ops_timesheets',
@@ -260,6 +261,11 @@
     <a href="#packages" class="px-4 py-3 text-sm font-medium border-b-2 transition-colors
       text-gray-500 hover:text-gray-900 border-transparent hover:border-gray-300
       focus:text-brand-700 focus:border-brand-500" onclick="activateTab(this)">Packages<% if (typeof servicePackages !== 'undefined' && servicePackages.length) { %> <span class="text-[10px] text-gray-400">(<%= servicePackages.length %>)</span><% } %></a>
+    <% } %>
+    <% if (showTab('deliverables')) { %>
+    <a href="#deliverables" class="px-4 py-3 text-sm font-medium border-b-2 transition-colors
+      text-gray-500 hover:text-gray-900 border-transparent hover:border-gray-300
+      focus:text-brand-700 focus:border-brand-500" onclick="activateTab(this)">Deliverables<% if (typeof jobDeliverables !== 'undefined' && jobDeliverables.length) { %> <span class="text-[10px] text-gray-400">(<%= jobDeliverables.length %>)</span><% } %></a>
     <% } %>
     <% if (showTab('diary')) { %>
     <a href="#diary" data-tab="diary" class="px-4 py-3 text-sm font-medium border-b-2 transition-colors
@@ -1606,6 +1612,55 @@
 
   <!-- Site Diary Tab -->
   <% if (showTab('diary')) { %>
+  <!-- Deliverables Tab (brief §5.3) -->
+  <% if (showTab('deliverables')) { %>
+  <div id="deliverables" class="tab-content">
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-4">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Deliverables</h2>
+        <div class="flex items-center gap-3">
+          <a href="/deliverables?job_id=<%= job.id %>" class="text-xs font-semibold text-gray-500 hover:text-brand-700">Register →</a>
+          <a href="/deliverables/new?job_id=<%= job.id %>" class="text-xs font-semibold text-brand-600 hover:text-brand-700">+ New deliverable</a>
+        </div>
+      </div>
+      <% const dlist = (typeof jobDeliverables !== 'undefined' ? jobDeliverables : []); %>
+      <% if (!dlist.length) { %>
+        <p class="p-4 text-sm text-gray-400">No deliverables yet — every report, drawing, model, letter and calculation gets a controlled reference and its QA chain here.</p>
+      <% } else { %>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="border-b border-gray-100">
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ref</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Title</th>
+              <th class="px-4 py-2 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Rev</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Internal Due</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Client Due</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Last Issued</th>
+              <th class="px-4 py-2 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <% const DELIV_BADGE = { draft:'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20', in_qa:'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20', approved:'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20', issued:'bg-teal-50 text-teal-700 ring-1 ring-teal-600/20', superseded:'bg-slate-50 text-slate-500 ring-1 ring-slate-600/20', closed:'bg-slate-50 text-slate-500 ring-1 ring-slate-600/20' }; %>
+            <% dlist.forEach(d => { %>
+            <tr class="hover:bg-gray-50">
+              <td class="px-4 py-2.5"><a href="/deliverables/<%= d.id %>" class="font-mono text-xs font-bold text-brand-600 hover:text-brand-700 hover:underline"><%= d.deliverable_ref %></a></td>
+              <td class="px-4 py-2.5 text-gray-700 text-xs truncate max-w-[260px]"><%= d.title %></td>
+              <td class="px-4 py-2.5 text-center font-mono text-xs text-gray-700"><%= d.current_revision || '—' %></td>
+              <td class="px-4 py-2.5 text-xs tabular-nums text-gray-500"><%= d.internal_due_date || '—' %></td>
+              <td class="px-4 py-2.5 text-xs tabular-nums text-gray-500"><%= d.external_due_date || '—' %></td>
+              <td class="px-4 py-2.5 text-xs tabular-nums text-gray-500"><%= d.latest_issue_date || '—' %></td>
+              <td class="px-4 py-2.5 text-center"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= DELIV_BADGE[d.status] || DELIV_BADGE.draft %>"><%= d.status.replace(/_/g,' ').toUpperCase() %></span></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } %>
+    </div>
+  </div>
+  <% } %>
+
   <!-- Service Packages Tab (brief §5.2) -->
   <% if (showTab('packages')) { %>
   <div id="packages" class="tab-content">

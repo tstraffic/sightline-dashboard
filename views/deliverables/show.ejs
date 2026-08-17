@@ -1,0 +1,325 @@
+<% locals.currentPage = 'deliverables' %>
+<%
+  const STATUS_BADGE = {
+    draft: 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20',
+    in_qa: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
+    approved: 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20',
+    issued: 'bg-teal-50 text-teal-700 ring-1 ring-teal-600/20',
+    superseded: 'bg-slate-50 text-slate-500 ring-1 ring-slate-600/20',
+    closed: 'bg-slate-50 text-slate-500 ring-1 ring-slate-600/20',
+  };
+  const REV_BADGE = {
+    draft: 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20',
+    prepared: 'bg-sky-50 text-sky-700 ring-1 ring-sky-600/20',
+    checked: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
+    approved: 'bg-teal-50 text-teal-700 ring-1 ring-teal-600/20',
+    superseded: 'bg-slate-50 text-slate-500 ring-1 ring-slate-600/20',
+  };
+  const live = !['closed','superseded'].includes(deliverable.status);
+  const canApproveHere = currentRev && (isQaAdmin || (currentRev.approver_id && user && currentRev.approver_id === user.id));
+%>
+
+<!-- Header -->
+<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
+  <div>
+    <div class="flex items-center gap-2 mb-1 flex-wrap">
+      <a href="/deliverables" class="text-gray-400 hover:text-gray-600 transition">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      </a>
+      <h1 class="text-2xl font-bold text-gray-900 font-mono"><%= deliverable.deliverable_ref %></h1>
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= STATUS_BADGE[deliverable.status] %>"><%= deliverable.status.replace(/_/g,' ').toUpperCase() %></span>
+      <% if (currentRev) { %><span class="text-xs text-gray-400 font-mono">Rev <%= currentRev.revision_label %></span><% } %>
+    </div>
+    <p class="text-sm text-gray-500 ml-7">
+      <%= deliverable.title %> ·
+      <a href="/jobs/<%= deliverable.job_id %>#deliverables" class="text-brand-600 hover:text-brand-700 font-medium"><%= deliverable.job_number %></a>
+      <% if (deliverable.package_ref) { %> · <span class="font-mono text-xs"><%= deliverable.package_ref %></span><% } %>
+      <% if (deliverable.sharepoint_working_url) { %> · <a href="<%= deliverable.sharepoint_working_url %>" target="_blank" rel="noopener" class="text-brand-600 hover:text-brand-700">Working ↗</a><% } %>
+      <% if (deliverable.sharepoint_issued_url) { %> · <a href="<%= deliverable.sharepoint_issued_url %>" target="_blank" rel="noopener" class="text-brand-600 hover:text-brand-700">Issued ↗</a><% } %>
+    </p>
+  </div>
+  <div class="flex items-center gap-2 flex-wrap">
+    <% if (live) { %>
+      <button type="button" onclick="document.getElementById('issue-panel').classList.toggle('hidden')"
+        class="inline-flex items-center px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors <%= currentRev && currentRev.status === 'approved' ? 'bg-brand-600 hover:bg-brand-500' : 'bg-gray-300 cursor-not-allowed' %>"
+        <%= currentRev && currentRev.status === 'approved' ? '' : 'disabled title="QA must be complete before issuing"' %>>Issue…</button>
+      <button type="button" onclick="document.getElementById('revision-panel').classList.toggle('hidden')" class="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">New Revision…</button>
+      <form method="POST" action="/deliverables/<%= deliverable.id %>/close" class="inline" onsubmit="return confirm('Close this deliverable?')">
+        <%- include('../partials/csrf') %>
+        <button type="submit" class="inline-flex items-center px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-500 text-sm font-medium rounded-lg transition-colors">Close</button>
+      </form>
+    <% } else { %>
+      <form method="POST" action="/deliverables/<%= deliverable.id %>/reopen" class="inline">
+        <%- include('../partials/csrf') %>
+        <button type="submit" class="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Reopen</button>
+      </form>
+    <% } %>
+    <% if (!issues.length) { %>
+      <form method="POST" action="/deliverables/<%= deliverable.id %>/delete" class="inline" onsubmit="return confirm('Delete this deliverable and its revisions?')">
+        <%- include('../partials/csrf') %>
+        <button type="submit" class="inline-flex items-center px-3 py-2 bg-gray-100 hover:bg-red-50 text-gray-400 hover:text-red-600 text-sm font-medium rounded-lg transition-colors" title="Delete (only possible before first issue)">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </button>
+      </form>
+    <% } %>
+  </div>
+</div>
+
+<!-- Issue panel -->
+<div id="issue-panel" class="hidden bg-white border border-brand-200 rounded-xl shadow-sm p-4 sm:p-5 mb-5">
+  <form method="POST" action="/deliverables/<%= deliverable.id %>/issue" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+    <%- include('../partials/csrf') %>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Issued To <span class="text-red-500">*</span></label>
+      <input type="text" name="issued_to" required placeholder="e.g. Meriton — J. Chen"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Purpose <span class="text-red-500">*</span></label>
+      <input type="text" name="issue_purpose" required value="<%= deliverable.issue_purpose || '' %>" placeholder="e.g. For Approval"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Transmittal / Email Ref</label>
+      <input type="text" name="transmittal_ref" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">SharePoint File Link</label>
+      <input type="url" name="sharepoint_file_link" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div class="sm:col-span-2 lg:col-span-3">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Notes</label>
+      <input type="text" name="notes" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Record Issue</button>
+  </form>
+  <p class="text-[10px] text-gray-400 mt-2">The issue register is permanent — it answers exactly what was issued, to whom and when (brief §5.5).</p>
+</div>
+
+<!-- New revision panel -->
+<div id="revision-panel" class="hidden bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 mb-5">
+  <form method="POST" action="/deliverables/<%= deliverable.id %>/revisions" enctype="multipart/form-data" class="flex flex-wrap items-end gap-3">
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Revision Label</label>
+      <input type="text" name="revision_label" value="<%= suggestedLabel %>" placeholder="A / 0 / P1"
+        class="w-28 px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <% [['preparer_id','Preparer', deliverable.preparer_id], ['checker_id','Checker', deliverable.checker_id], ['approver_id','Approver', deliverable.approver_id]].forEach(([name, label, def]) => { %>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1"><%= label %></label>
+      <select name="<%= name %>" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">TBA</option>
+        <% users.forEach(u => { %>
+          <option value="<%= u.id %>" <%= def == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+        <% }) %>
+      </select>
+    </div>
+    <% }) %>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">File (optional)</label>
+      <input type="file" name="file" class="text-xs text-gray-600">
+    </div>
+    <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Start Revision</button>
+    <p class="text-[10px] text-gray-400 basis-full">Starting a revision supersedes the current one — QA runs again from Prepare.</p>
+  </form>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+  <div class="lg:col-span-2 space-y-5">
+
+    <!-- QA stepper for the current revision -->
+    <% if (currentRev && currentRev.status !== 'superseded') { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">QA — Rev <%= currentRev.revision_label %></h2>
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= REV_BADGE[currentRev.status] %>"><%= currentRev.status.toUpperCase() %></span>
+      </div>
+      <%
+        const steps = [
+          { key: 'prepare', label: 'Prepare', done: ['prepared','checked','approved'].includes(currentRev.status), who: currentRev.preparer_name, at: currentRev.prepared_at },
+          { key: 'check', label: 'Check', done: ['checked','approved'].includes(currentRev.status), who: currentRev.checker_name, at: currentRev.checked_at },
+          { key: 'comments', label: 'Comments Closed', done: currentRev.comments_closed === 1 || !(currentRev.qa_comments || '').trim(), who: null, at: null, na: !(currentRev.qa_comments || '').trim() },
+          { key: 'approve', label: 'Approve', done: currentRev.status === 'approved', who: currentRev.approver_name, at: currentRev.approved_at },
+          { key: 'issue', label: 'Issue', done: deliverable.status === 'issued', who: null, at: deliverable.latest_issue_date },
+        ];
+      %>
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
+        <% steps.forEach((s, i) => { %>
+        <div class="p-2 rounded-lg text-center <%= s.done ? 'bg-teal-50/60' : 'bg-gray-50' %>">
+          <p class="text-[10px] font-bold uppercase tracking-widest <%= s.done ? 'text-teal-700' : 'text-gray-400' %>"><%= i + 1 %>. <%= s.label %></p>
+          <p class="text-[10px] mt-0.5 <%= s.done ? 'text-teal-600/80' : 'text-gray-300' %>">
+            <%= s.done ? (s.na ? 'n/a' : (s.who || '✓')) : 'pending' %>
+          </p>
+        </div>
+        <% }) %>
+      </div>
+
+      <div class="flex flex-wrap items-end gap-2">
+        <% if (currentRev.status === 'draft') { %>
+        <form method="POST" action="/deliverables/revisions/<%= currentRev.id %>/prepare"><%- include('../partials/csrf') %>
+          <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Mark Prepared</button>
+        </form>
+        <% } %>
+        <% if (currentRev.status === 'prepared') { %>
+        <form method="POST" action="/deliverables/revisions/<%= currentRev.id %>/check" class="flex items-end gap-2 flex-wrap"><%- include('../partials/csrf') %>
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">QA Comments (optional)</label>
+            <input type="text" name="qa_comments" placeholder="Issues found during checking…"
+              class="w-72 px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+          <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Mark Checked</button>
+        </form>
+        <% } %>
+        <% if (currentRev.status === 'checked' && (currentRev.qa_comments || '').trim() && !currentRev.comments_closed) { %>
+        <form method="POST" action="/deliverables/revisions/<%= currentRev.id %>/close-comments"><%- include('../partials/csrf') %>
+          <button type="submit" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-medium rounded-lg transition-colors">Close Out Comments</button>
+        </form>
+        <% } %>
+        <% if (currentRev.status === 'checked' && (currentRev.comments_closed || !(currentRev.qa_comments || '').trim())) { %>
+        <form method="POST" action="/deliverables/revisions/<%= currentRev.id %>/approve" class="flex items-end gap-2 flex-wrap"><%- include('../partials/csrf') %>
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Evidence Link (optional)</label>
+            <input type="url" name="evidence_link" placeholder="Marked-up review in SharePoint"
+              class="w-72 px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+          <button type="submit" <%= canApproveHere ? '' : 'disabled' %>
+            class="px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors <%= canApproveHere ? 'bg-brand-600 hover:bg-brand-500' : 'bg-gray-300 cursor-not-allowed' %>"
+            title="<%= canApproveHere ? '' : 'Only the assigned approver (or admin/management) can approve' %>">Approve</button>
+        </form>
+        <% } %>
+        <% if (currentRev.status === 'approved' && deliverable.status !== 'issued' && canApproveHere) { %>
+        <form method="POST" action="/deliverables/revisions/<%= currentRev.id %>/reopen" onsubmit="return confirm('Reopen the approval?')"><%- include('../partials/csrf') %>
+          <button type="submit" class="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-500 text-sm font-medium rounded-lg transition-colors">Reopen Approval</button>
+        </form>
+        <% } %>
+      </div>
+
+      <% if ((currentRev.qa_comments || '').trim()) { %>
+      <div class="mt-4 p-3 rounded-lg <%= currentRev.comments_closed ? 'bg-gray-50' : 'bg-amber-50/60' %>">
+        <p class="text-[10px] font-bold uppercase tracking-widest <%= currentRev.comments_closed ? 'text-gray-400' : 'text-amber-700' %>">QA Comments <%= currentRev.comments_closed ? '(closed out)' : '(open)' %></p>
+        <p class="text-sm text-gray-700 whitespace-pre-line mt-1"><%= currentRev.qa_comments %></p>
+      </div>
+      <% } %>
+      <% if (currentRev.file_path) { %>
+      <p class="text-xs text-gray-500 mt-3">Revision file: <a href="/<%= currentRev.file_path %>" target="_blank" class="text-brand-600 hover:text-brand-700 font-medium">download ↗</a></p>
+      <% } %>
+    </div>
+    <% } else if (!currentRev) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 text-center">
+      <p class="text-gray-500 text-sm">No revisions yet — start Rev <%= suggestedLabel || 'A' %> to begin QA.</p>
+    </div>
+    <% } %>
+
+    <!-- Issue register -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-4 py-3 border-b border-gray-100"><h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Issue Register (permanent)</h2></div>
+      <% if (!issues.length) { %>
+        <p class="p-4 text-sm text-gray-400">Nothing issued yet.</p>
+      <% } else { %>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead><tr class="border-b border-gray-100">
+            <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date</th>
+            <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Rev</th>
+            <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Issued To</th>
+            <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Purpose</th>
+            <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:table-cell">By / Approved</th>
+            <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Transmittal</th>
+          </tr></thead>
+          <tbody class="divide-y divide-gray-100">
+            <% issues.forEach(iss => { %>
+            <tr>
+              <td class="px-4 py-2.5 text-xs tabular-nums text-gray-700"><%= formatDateShort(iss.issue_date) %></td>
+              <td class="px-4 py-2.5 font-mono text-xs font-bold text-gray-900"><%= iss.revision_label %><%= iss.superseded_revision_label ? ' (supersedes ' + iss.superseded_revision_label + ')' : '' %></td>
+              <td class="px-4 py-2.5 text-gray-700 text-xs"><%= iss.issued_to %></td>
+              <td class="px-4 py-2.5 text-gray-600 text-xs"><%= iss.issue_purpose %></td>
+              <td class="px-4 py-2.5 text-gray-500 text-xs hidden md:table-cell"><%= iss.issued_by_name || '—' %><%= iss.approved_by_name ? ' / ' + iss.approved_by_name : '' %></td>
+              <td class="px-4 py-2.5 text-gray-500 text-xs font-mono hidden lg:table-cell"><%= iss.transmittal_ref || '—' %><% if (iss.sharepoint_file_link) { %> <a href="<%= iss.sharepoint_file_link %>" target="_blank" class="text-brand-600">↗</a><% } %></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } %>
+    </div>
+  </div>
+
+  <div class="space-y-5">
+    <!-- Details / edit -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Details</h2>
+      <form method="POST" action="/deliverables/<%= deliverable.id %>" class="space-y-3 text-sm">
+        <%- include('../partials/csrf') %>
+        <div>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Title</label>
+          <input type="text" name="title" value="<%= deliverable.title %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Internal Due</label>
+            <input type="date" name="internal_due_date" value="<%= deliverable.internal_due_date || '' %>" class="w-full px-2 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Client Due</label>
+            <input type="date" name="external_due_date" value="<%= deliverable.external_due_date || '' %>" class="w-full px-2 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+        </div>
+        <% [['preparer_id','Preparer', deliverable.preparer_id], ['checker_id','Checker', deliverable.checker_id], ['approver_id','Approver', deliverable.approver_id]].forEach(([name, label, val]) => { %>
+        <div>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1"><%= label %></label>
+          <select name="<%= name %>" class="w-full px-2 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <option value="">TBA</option>
+            <% users.forEach(u => { %>
+              <option value="<%= u.id %>" <%= val == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <% }) %>
+        <div>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Next Action</label>
+          <input type="text" name="next_action" value="<%= deliverable.next_action || '' %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">SharePoint Working URL</label>
+          <input type="url" name="sharepoint_working_url" value="<%= deliverable.sharepoint_working_url || '' %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">SharePoint Issued URL</label>
+          <input type="url" name="sharepoint_issued_url" value="<%= deliverable.sharepoint_issued_url || '' %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <button type="submit" class="w-full px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors">Save Details</button>
+      </form>
+    </div>
+
+    <!-- Revision history -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-4 py-3 border-b border-gray-100"><h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Revisions</h2></div>
+      <% if (!revisions.length) { %><p class="p-4 text-sm text-gray-400">None yet.</p><% } else { %>
+      <div class="divide-y divide-gray-100">
+        <% revisions.forEach(r => { %>
+        <div class="px-4 py-2.5 flex items-center justify-between gap-2">
+          <span class="font-mono text-xs font-bold text-gray-900">Rev <%= r.revision_label %></span>
+          <span class="text-[10px] text-gray-400"><%= r.preparer_name || '' %></span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= REV_BADGE[r.status] %>"><%= r.status.toUpperCase() %></span>
+        </div>
+        <% }) %>
+      </div>
+      <% } %>
+    </div>
+
+    <!-- History -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-4 py-3 border-b border-gray-100"><h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">History</h2></div>
+      <% if (!trail.length) { %><p class="p-4 text-sm text-gray-400">No history yet.</p><% } else { %>
+      <div class="divide-y divide-gray-100 max-h-80 overflow-y-auto">
+        <% trail.forEach(ev => { %>
+        <div class="px-4 py-2.5">
+          <p class="text-xs text-gray-700"><span class="font-semibold"><%= ev.user_name || 'System' %></span> — <%= ev.action %><%= ev.details ? ': ' + ev.details : '' %> <span class="text-gray-400">(<%= ev.entity_label %>)</span></p>
+          <p class="text-[10px] text-gray-400 mt-0.5"><%= formatDateTime(ev.created_at) %></p>
+        </div>
+        <% }) %>
+      </div>
+      <% } %>
+    </div>
+  </div>
+</div>

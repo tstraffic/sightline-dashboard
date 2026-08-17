@@ -1,0 +1,126 @@
+<% locals.currentPage = 'deliverables' %>
+<%
+  const STATUS_BADGE = {
+    draft: 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20',
+    in_qa: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
+    approved: 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20',
+    issued: 'bg-teal-50 text-teal-700 ring-1 ring-teal-600/20',
+    superseded: 'bg-slate-50 text-slate-500 ring-1 ring-slate-600/20',
+    closed: 'bg-slate-50 text-slate-500 ring-1 ring-slate-600/20',
+  };
+  const today = new Date().toISOString().slice(0, 10);
+  function buildUrl(overrides) {
+    const q = Object.assign({}, filters, overrides);
+    const parts = Object.entries(q).filter(([, v]) => v).map(([k, v]) => k + '=' + encodeURIComponent(v));
+    return '/deliverables' + (parts.length ? '?' + parts.join('&') : '');
+  }
+%>
+
+<%- include('../partials/page-header', {
+  eyebrow: 'Delivery',
+  title: 'Deliverables',
+  subtitle: 'Every report, drawing, model, letter and calculation — revision-controlled with prepare → check → approve → issue (brief §5.3/§5.6).',
+}) %>
+
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
+  <a href="<%= buildUrl({ status: '', qa: '', due: '' }) %>" class="stat-card">
+    <p class="stat-card-label">Deliverables</p>
+    <p class="stat-card-value <%= stats.total ? 'is-info' : 'is-muted' %>"><%= stats.total || 0 %></p>
+  </a>
+  <a href="<%= buildUrl({ qa: 'pending', status: '', due: '' }) %>" class="stat-card <%= stats.in_qa ? 'accent-amber' : '' %>">
+    <p class="stat-card-label">In QA</p>
+    <p class="stat-card-value <%= stats.in_qa ? 'is-warn' : 'is-muted' %>"><%= stats.in_qa || 0 %></p>
+  </a>
+  <a href="<%= buildUrl({ status: 'approved', qa: '', due: '' }) %>" class="stat-card">
+    <p class="stat-card-label">Ready to Issue</p>
+    <p class="stat-card-value <%= stats.ready_to_issue ? 'is-info' : 'is-muted' %>"><%= stats.ready_to_issue || 0 %></p>
+  </a>
+  <a href="<%= buildUrl({ due: 'overdue', status: '', qa: '' }) %>" class="stat-card <%= stats.overdue ? 'accent-amber' : '' %>">
+    <p class="stat-card-label">Overdue</p>
+    <p class="stat-card-value <%= stats.overdue ? 'is-critical' : 'is-muted' %>"><%= stats.overdue || 0 %></p>
+  </a>
+  <a href="<%= buildUrl({ status: 'issued', qa: '', due: '' }) %>" class="stat-card">
+    <p class="stat-card-label">Issued</p>
+    <p class="stat-card-value <%= stats.issued ? 'is-good' : 'is-muted' %>"><%= stats.issued || 0 %></p>
+  </a>
+</div>
+
+<form method="GET" action="/deliverables" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-4 mb-5">
+  <div class="flex flex-wrap items-end gap-3">
+    <div class="flex-1 min-w-[180px]">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Search</label>
+      <input type="text" name="search" value="<%= filters.search || '' %>" placeholder="Ref, title, project..."
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Type</label>
+      <select name="doc_type" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <% docTypes.forEach(t => { %>
+          <option value="<%= t %>" <%= filters.doc_type === t ? 'selected' : '' %>><%= t.charAt(0).toUpperCase() + t.slice(1) %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Status</label>
+      <select name="status" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <% ['draft','in_qa','approved','issued','superseded','closed'].forEach(s => { %>
+          <option value="<%= s %>" <%= filters.status === s ? 'selected' : '' %>><%= s.replace(/_/g, ' ').toUpperCase() %></option>
+        <% }) %>
+      </select>
+    </div>
+    <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Filter</button>
+    <a href="/deliverables" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Clear</a>
+  </div>
+</form>
+
+<% if (!deliverables.length) { %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-10 text-center">
+    <p class="text-gray-500 text-sm mb-1">No deliverables match.</p>
+    <p class="text-gray-400 text-xs">Deliverables are created from a project's Deliverables tab.</p>
+  </div>
+<% } else { %>
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
+  <table class="min-w-full text-sm">
+    <thead>
+      <tr class="border-b border-gray-100">
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Deliverable</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Project</th>
+        <th class="px-3 py-2.5 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden sm:table-cell">Rev</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Preparer</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:table-cell">Internal Due</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden xl:table-cell">Client Due</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Last Issued</th>
+        <th class="px-3 py-2.5 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      <% deliverables.forEach(d => {
+        const live = !['issued','closed','superseded'].includes(d.status);
+        const intOver = live && d.internal_due_date && d.internal_due_date < today;
+        const extOver = live && d.external_due_date && d.external_due_date < today;
+      %>
+      <tr class="hover:bg-gray-50">
+        <td class="px-3 py-2.5">
+          <a href="/deliverables/<%= d.id %>" class="font-mono text-xs font-bold text-brand-600 hover:text-brand-700 hover:underline"><%= d.deliverable_ref %></a>
+          <p class="text-gray-700 text-xs truncate max-w-[240px]"><%= d.title %></p>
+        </td>
+        <td class="px-3 py-2.5">
+          <a href="/jobs/<%= d.job_id %>#deliverables" class="text-gray-900 hover:text-brand-700 text-xs font-medium hover:underline"><%= d.job_number %></a>
+          <p class="text-gray-400 text-[10px] truncate max-w-[160px]"><%= d.client_name || '' %></p>
+        </td>
+        <td class="px-3 py-2.5 text-center font-mono text-xs text-gray-700"><%= d.current_revision || '—' %></td>
+        <td class="px-3 py-2.5 text-gray-600 text-xs hidden lg:table-cell"><%= d.preparer_name || '—' %></td>
+        <td class="px-3 py-2.5 text-xs tabular-nums hidden md:table-cell <%= intOver ? 'text-red-600 font-semibold' : 'text-gray-500' %>"><%= d.internal_due_date ? formatDateShort(d.internal_due_date) : '—' %></td>
+        <td class="px-3 py-2.5 text-xs tabular-nums hidden xl:table-cell <%= extOver ? 'text-red-600 font-semibold' : 'text-gray-500' %>"><%= d.external_due_date ? formatDateShort(d.external_due_date) : '—' %></td>
+        <td class="px-3 py-2.5 text-gray-500 text-xs tabular-nums hidden lg:table-cell"><%= d.latest_issue_date ? formatDateShort(d.latest_issue_date) : '—' %></td>
+        <td class="px-3 py-2.5 text-center">
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= STATUS_BADGE[d.status] || STATUS_BADGE.draft %>"><%= d.status.replace(/_/g, ' ').toUpperCase() %></span>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>
