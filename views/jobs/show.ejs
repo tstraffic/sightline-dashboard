@@ -2118,6 +2118,9 @@
       <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
         <p class="text-xs text-gray-500 uppercase">Contract Value</p>
         <p class="text-2xl font-bold text-gray-900 mt-1">$<%= (budget.contract_value || 0).toLocaleString() %></p>
+        <% if (budget.variations_approved > 0) { %>
+        <p class="text-xs text-brand-600 mt-1">+$<%= (budget.variations_approved || 0).toLocaleString() %> approved variations</p>
+        <% } %>
       </div>
       <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
         <p class="text-xs text-gray-500 uppercase">Total Budget</p>
@@ -2139,6 +2142,52 @@
       <a href="/budgets/job/<%= job.id %>" class="text-brand-600 text-sm hover:underline mt-2 inline-block">Set up budget</a>
     </div>
     <% } %>
+
+    <!-- Variations (brief §5.8) — approved fees feed the contract total above -->
+    <% if (typeof jobVariations !== 'undefined') { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-6">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-semibold text-gray-900">Variations</h3>
+        <div class="flex items-center gap-3">
+          <a href="/variations?job_id=<%= job.id %>" class="text-brand-600 text-xs font-medium hover:underline">Register</a>
+          <a href="/variations/new?job_id=<%= job.id %>" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium rounded-lg transition-colors">Raise Variation</a>
+        </div>
+      </div>
+      <% if (!jobVariations.length) { %>
+      <p class="text-gray-400 text-sm">No variations — raise one BEFORE absorbing scope beyond the proposal.</p>
+      <% } else { %>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-gray-200">
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ref</th>
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+              <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Fee</th>
+              <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <% jobVariations.forEach(v => { %>
+            <tr class="hover:bg-gray-50">
+              <td class="px-3 py-2"><a href="/variations/<%= v.id %>/edit" class="font-mono text-xs font-bold text-brand-600 hover:underline"><%= v.variation_ref %></a></td>
+              <td class="px-3 py-2 text-gray-600 text-xs truncate max-w-[280px]"><%= v.description %></td>
+              <td class="px-3 py-2 text-right text-gray-900 font-medium tabular-nums">$<%= (v.additional_fee || 0).toLocaleString() %></td>
+              <td class="px-3 py-2 text-center">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold
+                  <%= v.approval_status === 'approved' ? 'bg-teal-50 text-teal-700 ring-1 ring-teal-600/20'
+                    : v.approval_status === 'submitted' ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20'
+                    : v.approval_status === 'rejected' ? 'bg-red-50 text-red-700 ring-1 ring-red-600/20'
+                    : 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20' %>"><%= v.approval_status.toUpperCase() %></span>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } %>
+    </div>
+    <% } %>
+
     <!-- Cost Breakdown by Source -->
     <% const allSourcesTotal = totalSpend + (complianceCosts || 0) + (equipmentCosts || 0); %>
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-6">

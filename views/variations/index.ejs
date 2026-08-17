@@ -1,0 +1,119 @@
+<% locals.currentPage = 'variations' %>
+<%
+  function money(v) { return '$' + (v || 0).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+  const STATUS_BADGE = {
+    draft: 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20',
+    submitted: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
+    approved: 'bg-teal-50 text-teal-700 ring-1 ring-teal-600/20',
+    rejected: 'bg-red-50 text-red-700 ring-1 ring-red-600/20',
+  };
+%>
+
+<%- include('../partials/page-header', {
+  eyebrow: 'Delivery',
+  title: 'Variations',
+  subtitle: 'Scope change captured before the work is absorbed — approved variations roll straight into the project contract total (brief §5.8).',
+}) %>
+
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+  <div class="stat-card">
+    <p class="stat-card-label">Variations</p>
+    <p class="stat-card-value <%= stats.total ? 'is-info' : 'is-muted' %>"><%= stats.total || 0 %></p>
+  </div>
+  <div class="stat-card <%= stats.awaiting ? 'accent-amber' : '' %>">
+    <p class="stat-card-label">Awaiting Decision</p>
+    <p class="stat-card-value <%= stats.awaiting ? 'is-warn' : 'is-muted' %>"><%= stats.awaiting || 0 %></p>
+    <p class="stat-card-sub"><%= money(stats.awaiting_value) %></p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-card-label">Approved</p>
+    <p class="stat-card-value <%= stats.approved ? 'is-good' : 'is-muted' %>"><%= stats.approved || 0 %></p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-card-label">Approved Value</p>
+    <p class="stat-card-value <%= stats.approved_value ? 'is-good' : 'is-muted' %>"><%= money(stats.approved_value) %></p>
+  </div>
+</div>
+
+<form method="GET" action="/variations" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-4 mb-5">
+  <div class="flex flex-wrap items-end gap-3">
+    <div class="flex-1 min-w-[180px]">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Search</label>
+      <input type="text" name="search" value="<%= filters.search || '' %>" placeholder="Ref, description, project..."
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Status</label>
+      <select name="status" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <% statuses.forEach(s => { %>
+          <option value="<%= s %>" <%= filters.status === s ? 'selected' : '' %>><%= s.toUpperCase() %></option>
+        <% }) %>
+      </select>
+    </div>
+    <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Filter</button>
+  </div>
+</form>
+
+<% if (!variations.length) { %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-10 text-center">
+    <p class="text-gray-500 text-sm mb-1">No variations recorded.</p>
+    <p class="text-gray-400 text-xs">Raise variations from here or from a project's Budget tab — before doing the extra work, not after.</p>
+  </div>
+<% } else { %>
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
+  <table class="min-w-full text-sm">
+    <thead>
+      <tr class="border-b border-gray-100">
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Variation</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Project</th>
+        <th class="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Fee</th>
+        <th class="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:table-cell">Hours</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Identified</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Ref / Acceptance</th>
+        <th class="px-3 py-2.5 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+        <th class="px-3 py-2.5"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      <% variations.forEach(v => { %>
+      <tr class="hover:bg-gray-50">
+        <td class="px-3 py-2.5">
+          <span class="font-mono text-xs font-bold text-gray-900"><%= v.variation_ref %></span>
+          <p class="text-gray-700 text-xs truncate max-w-[260px]"><%= v.description %></p>
+        </td>
+        <td class="px-3 py-2.5">
+          <a href="/jobs/<%= v.job_id %>#budget" class="text-brand-600 hover:text-brand-700 text-xs font-medium hover:underline"><%= v.job_number %></a>
+        </td>
+        <td class="px-3 py-2.5 text-right text-gray-900 font-medium tabular-nums"><%= money(v.additional_fee) %></td>
+        <td class="px-3 py-2.5 text-right text-gray-500 tabular-nums hidden md:table-cell"><%= v.additional_hours || '—' %></td>
+        <td class="px-3 py-2.5 text-gray-500 text-xs tabular-nums hidden lg:table-cell"><%= v.date_identified ? formatDateShort(v.date_identified) : '—' %></td>
+        <td class="px-3 py-2.5 text-gray-500 text-xs font-mono hidden lg:table-cell"><%= v.approval_reference || '—' %><% if (v.sharepoint_acceptance_url) { %> <a href="<%= v.sharepoint_acceptance_url %>" target="_blank" class="text-brand-600">↗</a><% } %></td>
+        <td class="px-3 py-2.5 text-center">
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= STATUS_BADGE[v.approval_status] || STATUS_BADGE.draft %>"><%= v.approval_status.toUpperCase() %></span>
+        </td>
+        <td class="px-3 py-2.5 text-right">
+          <div class="flex items-center justify-end gap-2">
+            <% if (v.approval_status === 'draft') { %>
+            <form method="POST" action="/variations/<%= v.id %>/submit" class="inline"><%- include('../partials/csrf') %>
+              <button type="submit" class="text-brand-600 hover:text-brand-700 text-xs font-semibold">Submit</button>
+            </form>
+            <% } %>
+            <% if (v.approval_status === 'submitted' && canDecide) { %>
+            <form method="POST" action="/variations/<%= v.id %>/approve" class="inline-flex items-center gap-1"><%- include('../partials/csrf') %>
+              <input type="text" name="approval_reference" placeholder="Client ref" class="w-24 px-2 py-1 bg-white border border-gray-200 rounded text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-brand-500">
+              <button type="submit" class="text-teal-700 hover:text-teal-800 text-xs font-semibold">Approve</button>
+            </form>
+            <form method="POST" action="/variations/<%= v.id %>/reject" class="inline" onsubmit="return confirm('Reject this variation?')"><%- include('../partials/csrf') %>
+              <button type="submit" class="text-gray-400 hover:text-red-600 text-xs font-semibold">Reject</button>
+            </form>
+            <% } %>
+            <a href="/variations/<%= v.id %>/edit" class="text-gray-400 hover:text-brand-600 text-xs font-medium">Edit</a>
+          </div>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>

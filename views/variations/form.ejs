@@ -1,0 +1,152 @@
+<% locals.currentPage = 'variations' %>
+<% const isEdit = variation !== null && typeof variation !== 'undefined' && variation %>
+<% const feeLocked = isEdit && variation.approval_status === 'approved' && !canDecide %>
+
+<%- include('../partials/page-header', {
+  eyebrow: job.job_number + (job.project_name ? ' · ' + job.project_name : ''),
+  title: isEdit ? 'Edit ' + variation.variation_ref : 'New Variation',
+  subtitle: 'Scope change record — raise it BEFORE absorbing the extra work; approved fees roll into the contract total (brief §5.8).',
+  actions: [{ label: 'Back to Variations', href: '/variations' + (job.id ? '?job_id=' + job.id : ''), style: 'secondary' }]
+}) %>
+
+<% if (isEdit) { %>
+<div class="mb-4 max-w-3xl">
+  <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold
+    <%= variation.approval_status === 'approved' ? 'bg-teal-50 text-teal-700 ring-1 ring-teal-600/20'
+      : variation.approval_status === 'submitted' ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20'
+      : variation.approval_status === 'rejected' ? 'bg-red-50 text-red-700 ring-1 ring-red-600/20'
+      : 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20' %>">
+    <%= variation.approval_status.toUpperCase() %>
+    <% if (variation.approval_reference) { %><span class="ml-1.5 font-mono font-normal">· <%= variation.approval_reference %></span><% } %>
+  </span>
+</div>
+<% } %>
+
+<form method="POST" action="<%= isEdit ? '/variations/' + variation.id : '/variations' %>" class="space-y-5 max-w-3xl">
+  <%- include('../partials/csrf') %>
+  <% if (!isEdit) { %><input type="hidden" name="job_id" value="<%= job.id %>"><% } %>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Scope Change</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Description <span class="text-red-500">*</span></label>
+        <textarea name="description" required rows="2" placeholder="What extra scope is the client asking for?"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= isEdit ? variation.description : '' %></textarea>
+      </div>
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Reason / Trigger</label>
+        <input type="text" name="reason" value="<%= isEdit ? (variation.reason || '') : '' %>" placeholder="e.g. council RFI, design change, extra SIDRA scenario"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Requested By</label>
+        <input type="text" name="requested_by" value="<%= isEdit ? (variation.requested_by || '') : '' %>" placeholder="Client contact / authority"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Date Identified</label>
+        <input type="date" name="date_identified" value="<%= isEdit ? (variation.date_identified || '') : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Additional Fee ($ ex GST)</label>
+        <input type="number" name="additional_fee" step="0.01" min="0" value="<%= isEdit ? (variation.additional_fee || 0) : '' %>" <%= feeLocked ? 'readonly' : '' %>
+          class="w-full px-3 py-2 <%= feeLocked ? 'bg-gray-50 text-gray-500' : 'bg-white text-gray-900' %> border border-gray-300 rounded-lg text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <% if (feeLocked) { %><p class="text-[11px] text-gray-400 mt-1">Approved — the fee is part of the contract total; only admin/management/finance can change it.</p><% } %>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Additional Hours</label>
+        <input type="number" name="additional_hours" step="0.5" min="0" value="<%= isEdit ? (variation.additional_hours || 0) : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Delivery Impact</label>
+        <input type="text" name="delivery_impact" value="<%= isEdit ? (variation.delivery_impact || '') : '' %>" placeholder="e.g. issue date moves out 1 week"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <% if (isEdit) { %>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Xero Invoice Status</label>
+        <select name="invoice_status" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <% ['', 'not_invoiced', 'partially_invoiced', 'invoiced', 'paid'].forEach(s => { %>
+            <option value="<%= s %>" <%= (variation.invoice_status || '') === s ? 'selected' : '' %>><%= s ? s.replace(/_/g, ' ').toUpperCase() : '—' %></option>
+          <% }) %>
+        </select>
+      </div>
+      <% } %>
+      <div class="<%= isEdit ? '' : 'sm:col-span-2' %>">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">SharePoint Acceptance Link</label>
+        <input type="url" name="sharepoint_acceptance_url" value="<%= isEdit ? (variation.sharepoint_acceptance_url || '') : '' %>" placeholder="…/client acceptance email or signed doc"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between">
+    <% if (isEdit && variation.approval_status === 'draft') { %>
+    <button type="submit" form="delete-variation" class="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-medium rounded-lg transition-colors">Delete Draft</button>
+    <% } else { %><span></span><% } %>
+    <div class="flex items-center gap-3">
+      <a href="/variations<%= job.id ? '?job_id=' + job.id : '' %>" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Cancel</a>
+      <button type="submit" class="px-6 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors"><%= isEdit ? 'Save' : 'Raise Variation' %></button>
+    </div>
+  </div>
+</form>
+
+<% if (isEdit) { %>
+<!-- Lifecycle actions -->
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 mt-5 max-w-3xl">
+  <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Decision</h2>
+  <% if (variation.approval_status === 'draft') { %>
+  <form method="POST" action="/variations/<%= variation.id %>/submit"><%- include('../partials/csrf') %>
+    <input type="hidden" name="return_to" value="/variations/<%= variation.id %>/edit">
+    <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Submit for Decision</button>
+    <p class="text-[11px] text-gray-400 mt-2">Needs a fee or hours recorded first. Once submitted, admin/management/finance decide.</p>
+  </form>
+  <% } else if (variation.approval_status === 'submitted') { %>
+    <% if (canDecide) { %>
+    <div class="flex flex-wrap items-end gap-2">
+      <form method="POST" action="/variations/<%= variation.id %>/approve" class="flex items-end gap-2 flex-wrap"><%- include('../partials/csrf') %>
+        <input type="hidden" name="return_to" value="/variations/<%= variation.id %>/edit">
+        <div>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Client Approval Ref</label>
+          <input type="text" name="approval_reference" value="<%= variation.approval_reference || '' %>" placeholder="PO / email ref"
+            class="w-44 px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <button type="submit" class="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white text-sm font-medium rounded-lg transition-colors">Approve</button>
+      </form>
+      <form method="POST" action="/variations/<%= variation.id %>/reject" onsubmit="return confirm('Reject this variation?')"><%- include('../partials/csrf') %>
+        <input type="hidden" name="return_to" value="/variations/<%= variation.id %>/edit">
+        <button type="submit" class="px-4 py-2 bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 text-sm font-medium rounded-lg transition-colors">Reject</button>
+      </form>
+    </div>
+    <p class="text-[11px] text-gray-400 mt-2">Approval needs the client's reference or an acceptance link on file. Approving updates the project contract total.</p>
+    <% } else { %>
+    <p class="text-sm text-gray-500">Awaiting decision — admin, management or finance approve/reject submitted variations.</p>
+    <% } %>
+  <% } else if (canDecide) { %>
+  <div class="flex flex-wrap gap-2">
+    <% if (variation.approval_status === 'rejected') { %>
+    <form method="POST" action="/variations/<%= variation.id %>/approve" class="flex items-end gap-2 flex-wrap"><%- include('../partials/csrf') %>
+      <input type="hidden" name="return_to" value="/variations/<%= variation.id %>/edit">
+      <input type="text" name="approval_reference" value="<%= variation.approval_reference || '' %>" placeholder="Client ref"
+        class="w-40 px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+      <button type="submit" class="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white text-sm font-medium rounded-lg transition-colors">Approve Instead</button>
+    </form>
+    <% } else { %>
+    <form method="POST" action="/variations/<%= variation.id %>/reject" onsubmit="return confirm('Reverse the approval? The contract total will drop by this fee.')"><%- include('../partials/csrf') %>
+      <input type="hidden" name="return_to" value="/variations/<%= variation.id %>/edit">
+      <button type="submit" class="px-4 py-2 bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 text-sm font-medium rounded-lg transition-colors">Reverse to Rejected</button>
+    </form>
+    <% } %>
+  </div>
+  <p class="text-[11px] text-gray-400 mt-2">Decisions stay on the record — a decided variation can be re-decided but never deleted.</p>
+  <% } else { %>
+  <p class="text-sm text-gray-500">Decided. Only admin, management or finance can change the outcome.</p>
+  <% } %>
+</div>
+<form id="delete-variation" method="POST" action="/variations/<%= variation.id %>/delete" onsubmit="return confirm('Delete this draft variation?');">
+  <%- include('../partials/csrf') %>
+</form>
+<% } %>

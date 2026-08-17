@@ -28,6 +28,7 @@ const PAGES = [
   '/service-packages',
   '/deliverables',
   '/approvals',
+  '/variations',
   '/budgets',
   // Shared
   '/tasks',

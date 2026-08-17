@@ -3,6 +3,7 @@ const router = express.Router();
 const { getDb } = require('../db/database');
 const { requireRole } = require('../middleware/auth');
 const { logActivity } = require('../middleware/audit');
+const { jobHasVariations } = require('../lib/wip');
 
 // Apply role restriction to all routes
 router.use(requireRole('admin', 'finance'));
@@ -78,7 +79,8 @@ router.get('/job/:jobId', (req, res) => {
     spentByCategory,
     totalBudget,
     totalSpent,
-    margin: margin.toFixed(1)
+    margin: margin.toFixed(1),
+    hasVariations: jobHasVariations(db, req.params.jobId)
   });
 });
 
@@ -89,15 +91,20 @@ router.post('/job/:jobId', (req, res) => {
     invoiced_to_date, paid_to_date } = req.body;
   const job = db.prepare('SELECT job_number FROM jobs WHERE id = ?').get(req.params.jobId);
 
+  // Once variation rows exist, variations_approved is a projection owned by
+  // the variation register (lib/wip.js syncVariationTotals) — the manual
+  // field is ignored so a stale form can't overwrite the synced total.
+  const keepVariations = jobHasVariations(db, req.params.jobId);
   db.prepare(`
-    UPDATE job_budgets SET contract_value=?, budget_labour=?, budget_materials=?, budget_subcontractors=?, budget_equipment=?, budget_other=?, budget_contingency=?, variations_approved=?, notes=?,
+    UPDATE job_budgets SET contract_value=?, budget_labour=?, budget_materials=?, budget_subcontractors=?, budget_equipment=?, budget_other=?, budget_contingency=?,
+      variations_approved = CASE WHEN ? THEN variations_approved ELSE ? END, notes=?,
       invoiced_to_date=?, paid_to_date=?,
       updated_by_id=?, updated_at=CURRENT_TIMESTAMP
     WHERE job_id = ?
   `).run(
     parseFloat(contract_value) || 0, parseFloat(budget_labour) || 0, parseFloat(budget_materials) || 0,
     parseFloat(budget_subcontractors) || 0, parseFloat(budget_equipment) || 0, parseFloat(budget_other) || 0,
-    parseFloat(budget_contingency) || 0, parseFloat(variations_approved) || 0, notes || '',
+    parseFloat(budget_contingency) || 0, keepVariations ? 1 : 0, parseFloat(variations_approved) || 0, notes || '',
     parseFloat(invoiced_to_date) || 0, parseFloat(paid_to_date) || 0,
     req.session.user.id, req.params.jobId
   );

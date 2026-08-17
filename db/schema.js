@@ -16119,6 +16119,41 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 357 error:', e.message); }
   }
 
+  // Migration 358: variation register (brief §5.8) — scope change captured
+  // BEFORE additional work is absorbed. job_budgets.variations_approved
+  // becomes a projection of SUM(approved fees) via lib/wip.js
+  // syncVariationTotals once a job has variation rows (the manual budget-
+  // form field is disabled in that case).
+  if (!isMigrationApplied.get(358)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS variations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          variation_ref TEXT UNIQUE NOT NULL,
+          job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+          description TEXT NOT NULL,
+          reason TEXT DEFAULT '',
+          requested_by TEXT DEFAULT '',
+          date_identified DATE,
+          additional_fee REAL DEFAULT 0,
+          additional_hours REAL DEFAULT 0,
+          submitted_date DATE,
+          approval_status TEXT NOT NULL DEFAULT 'draft',
+          approval_reference TEXT DEFAULT '',
+          delivery_impact TEXT DEFAULT '',
+          invoice_status TEXT DEFAULT '',
+          sharepoint_acceptance_url TEXT DEFAULT '',
+          created_by INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_variations_job ON variations(job_id);
+      `);
+      recordMigration.run(358, 'Sightline variation register');
+      console.log('Migration 358 applied: variations table');
+    } catch (e) { console.error('Migration 358 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

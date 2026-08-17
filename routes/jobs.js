@@ -574,6 +574,7 @@ router.get('/:id', (req, res) => {
   let crmLinks = null;
   let jobDeliverables = [];
   let jobApprovals = [];
+  let jobVariations = [];
   try {
     servicePackages = db.prepare(`
       SELECT sp.*, u.full_name AS owner_name FROM service_packages sp
@@ -594,6 +595,10 @@ router.get('/:id', (req, res) => {
       LEFT JOIN users u ON a.responsible_id = u.id
       WHERE a.job_id = ? ORDER BY a.approval_ref
     `).all(job.id);
+    jobVariations = db.prepare(`
+      SELECT * FROM variations WHERE job_id = ?
+      ORDER BY CASE approval_status WHEN 'submitted' THEN 0 WHEN 'draft' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END, variation_ref
+    `).all(job.id);
   } catch (e) {
     console.error('[Jobs] service packages/CRM links failed for job', job.id, ':', e.message);
   }
@@ -607,7 +612,7 @@ router.get('/:id', (req, res) => {
     complianceTgsItems, allUsers, diaryAttachments, chatMembers,
     finalPlans, finalPlanDocs, finalTrafficPlans, planFlags, planRevisions, viewMode,
     swmsForJob, riskAssessmentsForJob, auditsForJob, safetyRollup,
-    servicePackages, crmLinks, jobDeliverables, jobApprovals,
+    servicePackages, crmLinks, jobDeliverables, jobApprovals, jobVariations,
     user: req.session.user,
     canViewAccounts: canViewAccounts(req.session.user)
   });
