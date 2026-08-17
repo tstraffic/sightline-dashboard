@@ -48,14 +48,16 @@
     <a href="/documents/job/<%= job.id %>" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Documents</a>
     <a href="/jobs/<%= job.id %>/documents" class="px-4 py-2 bg-brand-50 hover:bg-brand-100 text-brand-700 text-sm font-medium rounded-lg transition-colors" title="TGS / TMP / ROL / Stage Plans visible to crew on the worker portal">Site Docs</a>
     <% if (job.status === 'closed') { %>
-      <form method="POST" action="/jobs/<%= job.id %>/reopen" onsubmit="return confirm('Reopen <%= job.job_number %>? Status will be set to active.')">
+      <form method="POST" action="/jobs/<%= job.id %>/reopen" onsubmit="return confirm('Reopen <%= job.job_number %>? Status will be set to active<%= job.closeout_exception ? ' and the recorded closeout exception cleared' : '' %>.')">
         <%- include('../partials/csrf') %>
         <button type="submit" class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition-colors">Reopen</button>
       </form>
     <% } else { %>
+      <% const cbList = (typeof closeoutBlockers !== 'undefined' && closeoutBlockers) ? closeoutBlockers : []; %>
       <form method="POST" action="/jobs/<%= job.id %>/close" onsubmit="return confirm('Close out <%= job.job_number %>? This marks the job as closed.')">
         <%- include('../partials/csrf') %>
-        <button type="submit" class="inline-flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors">
+        <button type="submit" class="inline-flex items-center px-4 py-2 <%= cbList.length ? 'bg-gray-100 hover:bg-gray-200 text-gray-500' : 'bg-emerald-600 hover:bg-emerald-500 text-white' %> text-sm font-medium rounded-lg transition-colors"
+          <%= cbList.length ? 'title="' + cbList.length + ' outstanding item type(s) — see the closeout panel below"' : '' %>>
           <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
           Close Out
         </button>
@@ -72,6 +74,49 @@
     <% } %>
   </div>
 </div>
+
+<%# Closeout gate (brief §6.3): blockers while open; the exception record once closed over them. %>
+<% if (job.status === 'closed' && job.closeout_exception) { %>
+<div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+    <div>
+      <p class="text-sm font-semibold text-amber-800">Closed with an authorised exception</p>
+      <p class="text-sm text-amber-700 mt-0.5"><%= job.closeout_exception %></p>
+      <p class="text-[11px] text-amber-600/80 mt-1">The outstanding items at close are on the activity log. Reopening clears this record.</p>
+    </div>
+  </div>
+</div>
+<% } %>
+<% if (job.status !== 'closed' && typeof closeoutBlockers !== 'undefined' && closeoutBlockers && closeoutBlockers.length) { %>
+<div class="bg-white border border-amber-200 rounded-xl shadow-sm p-4 mb-6">
+  <div class="flex items-start justify-between gap-4 flex-wrap">
+    <div class="flex-1 min-w-[260px]">
+      <p class="text-sm font-semibold text-gray-900 mb-2">
+        <svg class="w-4 h-4 inline -mt-0.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        Closeout blocked — <%= closeoutBlockers.length %> item type<%= closeoutBlockers.length === 1 ? '' : 's' %> outstanding (brief §6.3)
+      </p>
+      <ul class="space-y-1">
+        <% closeoutBlockers.forEach(b => { %>
+        <li class="text-sm text-gray-600">
+          <a href="<%= b.href %>" class="text-brand-600 hover:underline"><%= b.label %></a>
+          <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 ml-1"><%= b.count %></span>
+        </li>
+        <% }) %>
+      </ul>
+    </div>
+    <% if (user && ['admin', 'management'].includes(String(user.role || '').toLowerCase())) { %>
+    <form method="POST" action="/jobs/<%= job.id %>/close" class="w-full sm:w-80" onsubmit="return confirm('Close <%= job.job_number %> over the outstanding items? The exception is recorded permanently.')">
+      <%- include('../partials/csrf') %>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Authorised exception (admin/management)</label>
+      <textarea name="override_reason" rows="2" required minlength="10" placeholder="Why is it acceptable to close with these outstanding? (kept on record)"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+      <button type="submit" class="mt-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-medium rounded-lg transition-colors">Close with Exception</button>
+    </form>
+    <% } %>
+  </div>
+</div>
+<% } %>
 
 <!-- Info Grid -->
 <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">

@@ -5,6 +5,7 @@ const fs = require('fs');
 const multer = require('multer');
 const { getDb } = require('../db/database');
 const { canViewAccounts, canViewInternalCost } = require('../middleware/auth');
+const { logActivity } = require('../middleware/audit');
 const { recalculateJobHealth, HEALTH_CALC_SQL } = require('../middleware/jobHealth');
 const { ensureThreadForEntity, addMembersToThread, postSystemMessage, getThreadForEntity } = require('../lib/chat');
 const { generateJobNumber } = require('../lib/jobNumbers');
@@ -50,22 +51,73 @@ router.post('/:id/status', (req, res) => {
   req.session.save(() => res.redirect('/jobs'));
 });
 
-// Close out a job — sets status = 'closed', drops it off priority, and returns to the detail page
+// Close out a job — gated per brief §6.3: refused while deliverables,
+// approvals, variations, client inputs, correspondence actions, tasks or
+// invoicing remain unresolved, UNLESS admin/management records an
+// authorised exception (stored on the job + audit trail).
 router.post('/:id/close', (req, res) => {
   const db = getDb();
   const job = db.prepare('SELECT id, job_number FROM jobs WHERE id = ?').get(req.params.id);
   if (!job) { req.flash('error', 'Job not found'); return req.session.save(() => res.redirect('/jobs')); }
-  db.prepare("UPDATE jobs SET status = 'closed', priority = 'normal' WHERE id = ?").run(job.id);
+
+  let blockers = [];
+  try { blockers = require('../lib/wip').getCloseoutBlockers(db, job.id); } catch (e) {
+    console.error('[Jobs] closeout blocker check failed:', e.message);
+  }
+  const overrideReason = (req.body.override_reason || '').trim();
+  const role = String((req.session.user && req.session.user.role) || '').toLowerCase();
+  const canOverride = ['admin', 'management'].includes(role);
+
+  if (blockers.length && !overrideReason) {
+    const list = blockers.map(b => `${b.label} (${b.count})`).join('; ');
+    req.flash('error', `${job.job_number} can't close out yet — outstanding: ${list}. Resolve them, or admin/management can record an authorised exception.`);
+    return req.session.save(() => res.redirect(`/jobs/${job.id}`));
+  }
+  if (blockers.length && overrideReason) {
+    if (!canOverride) {
+      req.flash('error', 'Only admin/management can close a project over outstanding items.');
+      return req.session.save(() => res.redirect(`/jobs/${job.id}`));
+    }
+    if (overrideReason.length < 10) {
+      req.flash('error', 'The exception reason needs to actually say why (10+ characters) — it becomes the permanent closeout record.');
+      return req.session.save(() => res.redirect(`/jobs/${job.id}`));
+    }
+    const list = blockers.map(b => `${b.label} (${b.count})`).join('; ');
+    db.prepare("UPDATE jobs SET status = 'closed', priority = 'normal', closeout_exception = ? WHERE id = ?")
+      .run(overrideReason, job.id);
+    logActivity({
+      user: req.session.user, action: 'complete', entityType: 'job',
+      entityId: job.id, entityLabel: job.job_number,
+      jobId: job.id, jobNumber: job.job_number,
+      details: `Closed with authorised exception: "${overrideReason}" — outstanding at close: ${list}`, ip: req.ip,
+    });
+    req.flash('success', `${job.job_number} closed with an authorised exception on record.`);
+    return req.session.save(() => res.redirect(`/jobs/${job.id}`));
+  }
+
+  // Clean close — clear any exception left from a previous close/reopen cycle.
+  db.prepare("UPDATE jobs SET status = 'closed', priority = 'normal', closeout_exception = '' WHERE id = ?").run(job.id);
+  logActivity({
+    user: req.session.user, action: 'complete', entityType: 'job',
+    entityId: job.id, entityLabel: job.job_number,
+    jobId: job.id, jobNumber: job.job_number, details: 'Closed out — no outstanding items', ip: req.ip,
+  });
   req.flash('success', `${job.job_number} closed out.`);
   req.session.save(() => res.redirect(`/jobs/${job.id}`));
 });
 
-// Reopen a closed job — sets status = 'active' and returns to the detail page
+// Reopen a closed job — sets status = 'active' and clears any recorded
+// closeout exception (the next close re-evaluates the gate from scratch).
 router.post('/:id/reopen', (req, res) => {
   const db = getDb();
   const job = db.prepare('SELECT id, job_number FROM jobs WHERE id = ?').get(req.params.id);
   if (!job) { req.flash('error', 'Job not found'); return req.session.save(() => res.redirect('/jobs')); }
-  db.prepare("UPDATE jobs SET status = 'active' WHERE id = ?").run(job.id);
+  db.prepare("UPDATE jobs SET status = 'active', closeout_exception = '' WHERE id = ?").run(job.id);
+  logActivity({
+    user: req.session.user, action: 'update', entityType: 'job',
+    entityId: job.id, entityLabel: job.job_number,
+    jobId: job.id, jobNumber: job.job_number, details: 'Reopened — closeout exception cleared', ip: req.ip,
+  });
   req.flash('success', `${job.job_number} reopened.`);
   req.session.save(() => res.redirect(`/jobs/${job.id}`));
 });
@@ -615,9 +667,11 @@ router.get('/:id', (req, res) => {
     console.error('[Jobs] service packages/CRM links failed for job', job.id, ':', e.message);
   }
   let wipData = null;
+  let closeoutBlockers = [];
   try {
-    const { getJobWip } = require('../lib/wip');
+    const { getJobWip, getCloseoutBlockers } = require('../lib/wip');
     wipData = getJobWip(db, job.id, { canSeeCost: canViewInternalCost(req.session.user) });
+    closeoutBlockers = job.status !== 'closed' ? getCloseoutBlockers(db, job.id) : [];
   } catch (e) {
     console.error('[Jobs] WIP rollup failed for job', job.id, ':', e.message);
   }
@@ -631,7 +685,7 @@ router.get('/:id', (req, res) => {
     complianceTgsItems, allUsers, diaryAttachments, chatMembers,
     finalPlans, finalPlanDocs, finalTrafficPlans, planFlags, planRevisions, viewMode,
     swmsForJob, riskAssessmentsForJob, auditsForJob, safetyRollup,
-    servicePackages, crmLinks, jobDeliverables, jobApprovals, jobVariations, jobClientInputs, jobCorrespondence, wipData,
+    servicePackages, crmLinks, jobDeliverables, jobApprovals, jobVariations, jobClientInputs, jobCorrespondence, wipData, closeoutBlockers,
     user: req.session.user,
     canViewAccounts: canViewAccounts(req.session.user)
   });

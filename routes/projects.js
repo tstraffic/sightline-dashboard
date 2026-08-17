@@ -532,9 +532,11 @@ router.get('/:id', (req, res) => {
     console.error('[Projects] service packages/CRM links failed for job', job.id, ':', e.message);
   }
   let wipData = null;
+  let closeoutBlockers = [];
   try {
-    const { getJobWip } = require('../lib/wip');
+    const { getJobWip, getCloseoutBlockers } = require('../lib/wip');
     wipData = getJobWip(db, job.id, { canSeeCost: canViewInternalCost(req.session.user) });
+    closeoutBlockers = job.status !== 'closed' ? getCloseoutBlockers(db, job.id) : [];
   } catch (e) {
     console.error('[Projects] WIP rollup failed for job', job.id, ':', e.message);
   }
@@ -548,7 +550,7 @@ router.get('/:id', (req, res) => {
     complianceTgsItems, allUsers, diaryAttachments, chatMembers, activities,
     finalPlans, finalPlanDocs, finalTrafficPlans, planFlags, planRevisions, viewMode,
     swmsForJob, riskAssessmentsForJob, auditsForJob, safetyRollup,
-    servicePackages, crmLinks, jobDeliverables, jobApprovals, jobVariations, jobClientInputs, jobCorrespondence, wipData,
+    servicePackages, crmLinks, jobDeliverables, jobApprovals, jobVariations, jobClientInputs, jobCorrespondence, wipData, closeoutBlockers,
     user: req.session.user,
     canViewAccounts: canViewAccounts(req.session.user)
   });
