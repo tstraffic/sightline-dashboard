@@ -4,7 +4,7 @@ const pathLib = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { getDb } = require('../db/database');
-const { canViewAccounts } = require('../middleware/auth');
+const { canViewAccounts, canViewInternalCost } = require('../middleware/auth');
 const { recalculateJobHealth, HEALTH_CALC_SQL } = require('../middleware/jobHealth');
 const { ensureThreadForEntity, addMembersToThread, postSystemMessage, getThreadForEntity } = require('../lib/chat');
 const { generateJobNumber } = require('../lib/jobNumbers');
@@ -614,6 +614,13 @@ router.get('/:id', (req, res) => {
   } catch (e) {
     console.error('[Jobs] service packages/CRM links failed for job', job.id, ':', e.message);
   }
+  let wipData = null;
+  try {
+    const { getJobWip } = require('../lib/wip');
+    wipData = getJobWip(db, job.id, { canSeeCost: canViewInternalCost(req.session.user) });
+  } catch (e) {
+    console.error('[Jobs] WIP rollup failed for job', job.id, ':', e.message);
+  }
 
   res.render('jobs/show', {
     title: job.job_number,
@@ -624,7 +631,7 @@ router.get('/:id', (req, res) => {
     complianceTgsItems, allUsers, diaryAttachments, chatMembers,
     finalPlans, finalPlanDocs, finalTrafficPlans, planFlags, planRevisions, viewMode,
     swmsForJob, riskAssessmentsForJob, auditsForJob, safetyRollup,
-    servicePackages, crmLinks, jobDeliverables, jobApprovals, jobVariations, jobClientInputs, jobCorrespondence,
+    servicePackages, crmLinks, jobDeliverables, jobApprovals, jobVariations, jobClientInputs, jobCorrespondence, wipData,
     user: req.session.user,
     canViewAccounts: canViewAccounts(req.session.user)
   });
@@ -637,7 +644,10 @@ router.get('/:id/edit', (req, res) => {
   if (!job) { req.flash('error', 'Job not found.'); return req.session.save(() => res.redirect('/jobs')); }
   const users = db.prepare('SELECT id, full_name, role FROM users WHERE active = 1 ORDER BY full_name').all();
   const clients = db.prepare('SELECT id, company_name FROM clients WHERE active = 1 ORDER BY company_name').all();
-  res.render('jobs/form', { title: 'Edit Job', job, users, clients, user: req.session.user });
+  // actual_hours goes read-only once time entries own it (lib/wip.js).
+  let jobHasTime = false;
+  try { jobHasTime = require('../lib/wip').jobHasTimeEntries(db, job.id); } catch (e) {}
+  res.render('jobs/form', { title: 'Edit Job', job, users, clients, jobHasTime, user: req.session.user });
 });
 
 // Update job

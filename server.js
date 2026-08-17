@@ -457,6 +457,7 @@ app.use('/approvals', requireLogin, requirePermission('projects'), require('./ro
 app.use('/variations', requireLogin, requirePermission('projects'), require('./routes/variations'));
 app.use('/client-inputs', requireLogin, requirePermission('projects'), require('./routes/client-inputs'));
 app.use('/correspondence', requireLogin, requirePermission('projects'), require('./routes/correspondence'));
+app.use('/time', requireLogin, requirePermission('projects'), require('./routes/time'));
 app.use('/chat', requireLogin, require('./routes/chat'));
 app.use('/notifications', requireLogin, requirePermission('notifications'), require('./routes/notifications'));
 app.use('/admin/integrations', requireLogin, requirePermission('admin'), require('./routes/integrations'));

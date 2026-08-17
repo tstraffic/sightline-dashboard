@@ -16227,6 +16227,37 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 360 error:', e.message); }
   }
 
+  // Migration 361: time entries (brief §5.9, §5.15) — keyed on USERS, never
+  // the legacy crew-based timesheets (hidden T&S module). charge_rate and
+  // cost_rate are SNAPSHOTTED at insert from system_config so later rate
+  // changes never rewrite historical WIP. jobs.actual_hours becomes a
+  // projection of SUM(hours) via lib/wip.js syncJobActualHours.
+  if (!isMigrationApplied.get(361)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS time_entries (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+          service_package_id INTEGER REFERENCES service_packages(id),
+          entry_date DATE NOT NULL,
+          activity_code TEXT NOT NULL DEFAULT '01',
+          hours REAL NOT NULL DEFAULT 0,
+          billable INTEGER NOT NULL DEFAULT 1,
+          description TEXT DEFAULT '',
+          charge_rate REAL,
+          cost_rate REAL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_time_entries_user_date ON time_entries(user_id, entry_date);
+        CREATE INDEX IF NOT EXISTS idx_time_entries_job_date ON time_entries(job_id, entry_date);
+      `);
+      recordMigration.run(361, 'Sightline time entries');
+      console.log('Migration 361 applied: time_entries table');
+    } catch (e) { console.error('Migration 361 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

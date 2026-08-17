@@ -31,6 +31,7 @@ const PAGES = [
   '/variations',
   '/client-inputs',
   '/correspondence',
+  '/time',
   '/budgets',
   // Shared
   '/tasks',

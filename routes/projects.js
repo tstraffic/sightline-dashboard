@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
-const { canViewAccounts } = require('../middleware/auth');
+const { canViewAccounts, canViewInternalCost } = require('../middleware/auth');
 const { recalculateJobHealth, HEALTH_CALC_SQL } = require('../middleware/jobHealth');
 const { logActivity } = require('../middleware/audit');
 const { ensureThreadForEntity, addMembersToThread, postSystemMessage, getThreadForEntity } = require('../lib/chat');
@@ -531,6 +531,13 @@ router.get('/:id', (req, res) => {
   } catch (e) {
     console.error('[Projects] service packages/CRM links failed for job', job.id, ':', e.message);
   }
+  let wipData = null;
+  try {
+    const { getJobWip } = require('../lib/wip');
+    wipData = getJobWip(db, job.id, { canSeeCost: canViewInternalCost(req.session.user) });
+  } catch (e) {
+    console.error('[Projects] WIP rollup failed for job', job.id, ':', e.message);
+  }
 
   res.render('jobs/show', {
     title: job.job_number,
@@ -541,7 +548,7 @@ router.get('/:id', (req, res) => {
     complianceTgsItems, allUsers, diaryAttachments, chatMembers, activities,
     finalPlans, finalPlanDocs, finalTrafficPlans, planFlags, planRevisions, viewMode,
     swmsForJob, riskAssessmentsForJob, auditsForJob, safetyRollup,
-    servicePackages, crmLinks, jobDeliverables, jobApprovals, jobVariations, jobClientInputs, jobCorrespondence,
+    servicePackages, crmLinks, jobDeliverables, jobApprovals, jobVariations, jobClientInputs, jobCorrespondence, wipData,
     user: req.session.user,
     canViewAccounts: canViewAccounts(req.session.user)
   });

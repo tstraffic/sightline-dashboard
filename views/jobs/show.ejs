@@ -2296,6 +2296,45 @@
     </div>
     <% } %>
 
+    <!-- Time & WIP (brief §5.9) — hours and value from time entries -->
+    <% if (typeof wipData !== 'undefined' && wipData && (wipData.actualHours > 0 || wipData.budgetHours > 0)) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-6">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-semibold text-gray-900">Time & WIP</h3>
+        <a href="/time?job_id=<%= job.id %>" class="text-brand-600 text-xs font-medium hover:underline">Full breakdown</a>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <p class="text-xs text-gray-500 uppercase">Hours — Actual / Budget</p>
+          <p class="text-lg font-bold <%= wipData.consumedPct !== null && wipData.consumedPct > 100 ? 'text-red-600' : 'text-gray-900' %> mt-1 tabular-nums">
+            <%= Math.round((wipData.actualHours || 0) * 10) / 10 %><span class="text-sm text-gray-400 font-normal"> / <%= wipData.budgetHours || '—' %></span>
+          </p>
+          <% if (wipData.consumedPct !== null) { %><p class="text-[11px] text-gray-400"><%= wipData.consumedPct %>% consumed</p><% } %>
+        </div>
+        <div>
+          <p class="text-xs text-gray-500 uppercase">WIP Value</p>
+          <p class="text-lg font-bold text-gray-900 mt-1 tabular-nums">$<%= Math.round(wipData.wipValue || 0).toLocaleString() %></p>
+        </div>
+        <div>
+          <p class="text-xs text-gray-500 uppercase">Contract incl. Variations</p>
+          <p class="text-lg font-bold text-gray-900 mt-1 tabular-nums">$<%= Math.round(wipData.contractTotal || 0).toLocaleString() %></p>
+        </div>
+        <% if (typeof wipData.estMargin !== 'undefined') { %>
+        <div>
+          <p class="text-xs text-gray-500 uppercase">Est. Margin</p>
+          <p class="text-lg font-bold <%= (wipData.estMargin || 0) >= 0 ? 'text-emerald-600' : 'text-red-600' %> mt-1 tabular-nums">$<%= Math.round(wipData.estMargin || 0).toLocaleString() %></p>
+          <% if (wipData.estMarginPct !== null) { %><p class="text-[11px] text-gray-400"><%= wipData.estMarginPct %>%</p><% } %>
+        </div>
+        <% } else { %>
+        <div>
+          <p class="text-xs text-gray-500 uppercase">Effective Recovery</p>
+          <p class="text-lg font-bold text-gray-900 mt-1 tabular-nums"><%= wipData.effectiveRecovery !== null ? Math.round(wipData.effectiveRecovery * 100) + '%' : '—' %></p>
+        </div>
+        <% } %>
+      </div>
+    </div>
+    <% } %>
+
     <!-- Cost Breakdown by Source -->
     <% const allSourcesTotal = totalSpend + (complianceCosts || 0) + (equipmentCosts || 0); %>
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-6">

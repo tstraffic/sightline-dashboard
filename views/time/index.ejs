@@ -1,0 +1,262 @@
+<% locals.currentPage = 'time' %>
+<%
+  function hrs(v) { return (Math.round((v || 0) * 10) / 10).toLocaleString('en-AU'); }
+  function money(v) { return '$' + Math.round(v || 0).toLocaleString('en-AU'); }
+  const DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+%>
+
+<% if (mode === 'job') { %>
+
+<%- include('../partials/page-header', {
+  eyebrow: job.job_number + (job.project_name ? ' · ' + job.project_name : ''),
+  title: 'Time & WIP',
+  subtitle: 'Budget vs actual, work in progress and recovery for this project (brief §5.9).',
+  actions: [
+    { label: 'My Time', href: '/time', style: 'secondary' },
+    { label: 'Project', href: '/jobs/' + job.id + '#budget', style: 'secondary' },
+  ]
+}) %>
+
+<% if (wip) { %>
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+  <div class="stat-card">
+    <p class="stat-card-label">Hours — Actual / Budget</p>
+    <p class="stat-card-value <%= wip.consumedPct !== null && wip.consumedPct > 100 ? 'is-bad' : 'is-info' %>"><%= hrs(wip.actualHours) %><span class="text-sm text-gray-400 font-normal"> / <%= wip.budgetHours ? hrs(wip.budgetHours) : '—' %></span></p>
+    <% if (wip.consumedPct !== null) { %><p class="stat-card-sub"><%= wip.consumedPct %>% consumed</p><% } %>
+  </div>
+  <div class="stat-card">
+    <p class="stat-card-label">WIP Value</p>
+    <p class="stat-card-value is-info"><%= money(wip.wipValue) %></p>
+    <p class="stat-card-sub">Σ hours × charge rate</p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-card-label">Contract (incl. variations)</p>
+    <p class="stat-card-value is-info"><%= money(wip.contractTotal) %></p>
+    <% if (wip.variationsApproved) { %><p class="stat-card-sub">incl. <%= money(wip.variationsApproved) %> variations</p><% } %>
+  </div>
+  <% if (canSeeCost) { %>
+  <div class="stat-card">
+    <p class="stat-card-label">Est. Margin</p>
+    <p class="stat-card-value <%= (wip.estMargin || 0) >= 0 ? 'is-good' : 'is-bad' %>"><%= money(wip.estMargin) %></p>
+    <% if (wip.estMarginPct !== null) { %><p class="stat-card-sub"><%= wip.estMarginPct %>% on cost <%= money(wip.costValue) %></p><% } %>
+  </div>
+  <% } else { %>
+  <div class="stat-card">
+    <p class="stat-card-label">Effective Recovery</p>
+    <p class="stat-card-value is-info"><%= wip.effectiveRecovery !== null ? Math.round(wip.effectiveRecovery * 100) + '%' : '—' %></p>
+    <p class="stat-card-sub">WIP vs contract</p>
+  </div>
+  <% } %>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+    <h3 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Hours by Package</h3>
+    <% if (!wip.byPackage.length) { %><p class="text-gray-400 text-sm">No time logged.</p><% } else { %>
+    <div class="space-y-2">
+      <% wip.byPackage.forEach(p => { %>
+      <div class="flex items-center justify-between text-sm">
+        <span class="font-mono text-xs text-gray-600"><%= p.label %></span>
+        <span class="text-gray-900 font-medium tabular-nums"><%= hrs(p.hours) %>h <span class="text-gray-400 text-xs">· <%= money(p.wip) %></span></span>
+      </div>
+      <% }) %>
+    </div>
+    <% } %>
+  </div>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+    <h3 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Hours by Activity</h3>
+    <% if (!wip.byActivity.length) { %><p class="text-gray-400 text-sm">No time logged.</p><% } else { %>
+    <div class="space-y-2">
+      <% wip.byActivity.forEach(a => { %>
+      <div class="flex items-center justify-between text-sm">
+        <span class="text-gray-600 text-xs"><%= a.label %></span>
+        <span class="text-gray-900 font-medium tabular-nums"><%= hrs(a.hours) %>h</span>
+      </div>
+      <% }) %>
+    </div>
+    <% } %>
+  </div>
+</div>
+<% } %>
+
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
+  <table class="min-w-full text-sm">
+    <thead>
+      <tr class="border-b border-gray-100">
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Who</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Activity</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:table-cell">Package</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Description</th>
+        <th class="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Hours</th>
+        <% if (canSeeCost) { %>
+        <th class="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Charge</th>
+        <th class="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Cost</th>
+        <% } %>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      <% if (!entries.length) { %>
+      <tr><td colspan="8" class="px-3 py-8 text-center text-gray-400 text-sm">No time logged against this project yet.</td></tr>
+      <% } %>
+      <% entries.forEach(e => { %>
+      <tr class="hover:bg-gray-50 <%= e.billable ? '' : 'opacity-60' %>">
+        <td class="px-3 py-2 text-gray-500 text-xs tabular-nums"><%= e.entry_date %></td>
+        <td class="px-3 py-2 text-gray-700 text-xs"><%= e.user_name %></td>
+        <td class="px-3 py-2 text-gray-600 text-xs"><%= codeLabels[e.activity_code] || e.activity_code %></td>
+        <td class="px-3 py-2 font-mono text-[11px] text-gray-500 hidden md:table-cell"><%= e.package_ref || '—' %></td>
+        <td class="px-3 py-2 text-gray-500 text-xs truncate max-w-[220px] hidden lg:table-cell"><%= e.description || '' %><%= e.billable ? '' : ' (non-billable)' %></td>
+        <td class="px-3 py-2 text-right text-gray-900 font-medium tabular-nums"><%= hrs(e.hours) %></td>
+        <% if (canSeeCost) { %>
+        <td class="px-3 py-2 text-right text-gray-500 text-xs tabular-nums"><%= money((e.hours || 0) * (e.charge_rate || 0)) %></td>
+        <td class="px-3 py-2 text-right text-gray-500 text-xs tabular-nums"><%= money((e.hours || 0) * (e.cost_rate || 0)) %></td>
+        <% } %>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<% } else { %>
+
+<%- include('../partials/page-header', {
+  eyebrow: 'Delivery',
+  title: 'My Time',
+  subtitle: 'Log hours against projects with the standard activity codes (brief §5.15) — budget vs actual and WIP roll up from here.',
+}) %>
+
+<!-- Week navigation -->
+<div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+  <div class="inline-flex rounded-lg overflow-hidden border border-gray-300 shadow-sm">
+    <a href="/time?week=<%= prevWeek %><%= targetUserId && isAdmin ? '&user_id=' + targetUserId : '' %>" class="px-3 py-2 bg-white text-gray-600 hover:bg-gray-50 text-sm border-r border-gray-300">← Prev</a>
+    <span class="px-4 py-2 bg-gray-50 text-gray-900 text-sm font-medium tabular-nums"><%= formatDateShort(weekStart) %> – <%= formatDateShort(weekEnd) %></span>
+    <a href="/time?week=<%= nextWeek %><%= targetUserId && isAdmin ? '&user_id=' + targetUserId : '' %>" class="px-3 py-2 bg-white text-gray-600 hover:bg-gray-50 text-sm border-l border-gray-300">Next →</a>
+  </div>
+  <div class="flex items-center gap-3">
+    <% if (isAdmin && users.length) { %>
+    <form method="GET" action="/time" class="flex items-center gap-2">
+      <input type="hidden" name="week" value="<%= weekStart %>">
+      <select name="user_id" onchange="this.form.submit()" class="text-sm bg-white border border-gray-300 text-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <% users.forEach(u => { %>
+        <option value="<%= u.id %>" <%= targetUserId == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+        <% }) %>
+      </select>
+    </form>
+    <% } %>
+    <div class="text-right">
+      <p class="text-2xl font-bold text-gray-900 tabular-nums leading-none"><%= hrs(weekTotal) %>h</p>
+      <p class="text-[11px] text-gray-400"><%= hrs(billableTotal) %>h billable</p>
+    </div>
+  </div>
+</div>
+
+<!-- Quick add -->
+<form method="POST" action="/time" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-5">
+  <%- include('../partials/csrf') %>
+  <input type="hidden" name="week" value="<%= weekStart %>">
+  <% if (isAdmin && targetUserId) { %><input type="hidden" name="user_id" value="<%= targetUserId %>"><% } %>
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 items-end">
+    <div class="col-span-2">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Project <span class="text-red-500">*</span></label>
+      <select name="job_id" required id="time-job-select" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">Select…</option>
+        <% jobs.forEach(j => { %>
+        <option value="<%= j.id %>"><%= j.job_number %> — <%= j.project_name || j.job_name %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Package</label>
+      <select name="service_package_id" id="time-package-select" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">—</option>
+        <% packages.forEach(p => { %>
+        <option value="<%= p.id %>" data-job="<%= p.job_id %>"><%= p.package_ref %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Activity</label>
+      <select name="activity_code" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <% codes.forEach(c => { %>
+        <option value="<%= c.key %>"><%= c.label %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Date</label>
+      <input type="date" name="entry_date" value="<%= today >= weekStart && today <= weekEnd ? today : weekStart %>" min="<%= weekStart %>" max="<%= weekEnd %>"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Hours <span class="text-red-500">*</span></label>
+      <input type="number" name="hours" required step="0.25" min="0.25" max="24" placeholder="1.5"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+      <button type="submit" class="w-full px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Log Time</button>
+    </div>
+  </div>
+  <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 mt-3 items-center">
+    <input type="text" name="description" placeholder="What was the time spent on? (optional)"
+      class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    <label class="inline-flex items-center gap-2 text-sm text-gray-600">
+      <input type="checkbox" name="billable" value="1" checked onchange="this.value = this.checked ? '1' : '0'" class="rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+      Billable
+    </label>
+  </div>
+</form>
+<script>
+  // Filter the package select to the chosen project.
+  (function () {
+    const jobSel = document.getElementById('time-job-select');
+    const pkgSel = document.getElementById('time-package-select');
+    if (!jobSel || !pkgSel) return;
+    const all = Array.from(pkgSel.querySelectorAll('option[data-job]'));
+    function sync() {
+      const jid = jobSel.value;
+      all.forEach(o => { o.hidden = jid && o.dataset.job !== jid; });
+      if (pkgSel.selectedOptions[0] && pkgSel.selectedOptions[0].hidden) pkgSel.value = '';
+    }
+    jobSel.addEventListener('change', sync); sync();
+  })();
+</script>
+
+<!-- Week days -->
+<div class="space-y-4">
+  <% weekDays.forEach((d, i) => { const dayEntries = byDay[d] || []; const dayTotal = dayEntries.reduce((s, e) => s + (e.hours || 0), 0); %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden <%= d === today ? 'ring-2 ring-brand-200' : '' %>">
+    <div class="flex items-center justify-between px-4 py-2.5 <%= dayEntries.length ? 'border-b border-gray-100' : '' %>">
+      <h3 class="text-sm font-semibold <%= d === today ? 'text-brand-700' : 'text-gray-700' %>">
+        <%= DAY_NAMES[i] %> <span class="text-gray-400 font-normal text-xs tabular-nums"><%= formatDateShort(d) %></span>
+        <%= d === today ? ' · today' : '' %>
+      </h3>
+      <span class="text-sm font-bold text-gray-900 tabular-nums"><%= dayTotal ? hrs(dayTotal) + 'h' : '' %></span>
+    </div>
+    <% if (dayEntries.length) { %>
+    <table class="min-w-full text-sm">
+      <tbody class="divide-y divide-gray-50">
+        <% dayEntries.forEach(e => { %>
+        <tr class="hover:bg-gray-50 <%= e.billable ? '' : 'opacity-60' %>">
+          <td class="px-4 py-2 w-40">
+            <a href="/time?job_id=<%= e.job_id %>" class="font-mono text-xs font-bold text-brand-600 hover:underline"><%= e.job_number %></a>
+            <% if (e.package_ref) { %><p class="font-mono text-[10px] text-gray-400"><%= e.package_ref %></p><% } %>
+          </td>
+          <td class="px-4 py-2 text-gray-600 text-xs"><%= codeLabels[e.activity_code] || e.activity_code %></td>
+          <td class="px-4 py-2 text-gray-500 text-xs truncate max-w-[260px]"><%= e.description || '' %><%= e.billable ? '' : ' (non-billable)' %></td>
+          <td class="px-4 py-2 text-right text-gray-900 font-medium tabular-nums w-16"><%= hrs(e.hours) %>h</td>
+          <td class="px-4 py-2 text-right w-10">
+            <form method="POST" action="/time/<%= e.id %>/delete" class="inline" onsubmit="return confirm('Delete this time entry?')"><%- include('../partials/csrf') %>
+              <input type="hidden" name="return_to" value="/time?week=<%= weekStart %>">
+              <button type="submit" class="text-gray-300 hover:text-red-600 text-xs">✕</button>
+            </form>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <% } %>
+  </div>
+  <% }) %>
+</div>
+
+<% } %>
