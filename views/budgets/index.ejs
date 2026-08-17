@@ -56,6 +56,41 @@
   </div>
 </div>
 
+<!-- Ready-to-invoice queue (brief §10.1) — work delivery has queued for Xero -->
+<% if (typeof readyQueue !== 'undefined' && readyQueue.length) { %>
+<div class="bg-white border border-amber-200 rounded-xl shadow-sm overflow-hidden mb-4">
+  <div class="flex items-center justify-between px-4 py-3 border-b border-amber-100 bg-amber-50/50">
+    <div>
+      <h2 class="text-sm font-semibold text-gray-900">Ready to Invoice</h2>
+      <p class="text-[11px] text-gray-500"><%= readyQueue.length %> package<%= readyQueue.length === 1 ? '' : 's' %> queued by delivery — raise the Xero invoice, then mark it invoiced</p>
+    </div>
+    <p class="text-lg font-extrabold text-amber-700 tabular-nums"><%= fmtCurrency(readyQueue.reduce((s, q) => s + (q.fee_allocation || 0), 0)) %></p>
+  </div>
+  <table class="min-w-full text-sm">
+    <tbody class="divide-y divide-gray-100">
+      <% readyQueue.forEach(q => { %>
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-2.5">
+          <span class="font-mono text-xs font-bold text-gray-900"><%= q.package_ref %></span>
+          <p class="text-gray-400 text-[10px]"><%= q.client || '' %></p>
+        </td>
+        <td class="px-4 py-2.5"><a href="/budgets/job/<%= q.job_id %>" class="text-brand-600 hover:underline text-xs font-medium"><%= q.job_number %></a></td>
+        <td class="px-4 py-2.5 text-gray-500 text-xs">queued <%= q.ready_for_invoice_at ? formatDateShort(q.ready_for_invoice_at) : '' %><%= q.queued_by_name ? ' by ' + q.queued_by_name : '' %></td>
+        <td class="px-4 py-2.5 text-right text-gray-900 font-semibold tabular-nums"><%= fmtFull(q.fee_allocation) %></td>
+        <td class="px-4 py-2.5 text-right">
+          <form method="POST" action="/service-packages/<%= q.id %>/mark-invoiced" class="inline-flex items-center gap-1.5"><%- include('../partials/csrf') %>
+            <input type="hidden" name="return_to" value="/budgets">
+            <input type="text" name="invoice_number" required placeholder="INV-xxxx" class="w-24 px-2 py-1 bg-white border border-gray-200 rounded text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-brand-500">
+            <button type="submit" class="text-teal-700 hover:text-teal-800 text-xs font-semibold">Mark Invoiced</button>
+          </form>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>
+
 <!-- Jobs Budget Table -->
 <% if (budgets.length === 0) { %>
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 text-center">

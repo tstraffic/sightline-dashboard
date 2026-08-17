@@ -33,10 +33,11 @@
     <p class="stat-card-label">Completed</p>
     <p class="stat-card-value <%= stats.completed ? 'is-good' : 'is-muted' %>"><%= stats.completed || 0 %></p>
   </div>
-  <div class="stat-card">
-    <p class="stat-card-label">Allocated Fees</p>
-    <p class="stat-card-value <%= stats.total_fees ? 'is-info' : 'is-muted' %>"><%= money(stats.total_fees) %></p>
-  </div>
+  <a href="/service-packages?invoice_state=ready" class="stat-card <%= stats.ready_to_invoice ? 'accent-amber' : '' %> hover:ring-2 hover:ring-brand-200 transition-shadow">
+    <p class="stat-card-label">Ready to Invoice</p>
+    <p class="stat-card-value <%= stats.ready_to_invoice ? 'is-warn' : 'is-muted' %>"><%= stats.ready_to_invoice || 0 %></p>
+    <p class="stat-card-sub"><%= money(stats.ready_value) %></p>
+  </a>
 </div>
 
 <form method="GET" action="/service-packages" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-4 mb-5">
@@ -73,6 +74,15 @@
         <% }) %>
       </select>
     </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Invoicing</label>
+      <select name="invoice_state" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <option value="pending" <%= filters.invoice_state === 'pending' ? 'selected' : '' %>>Not Queued</option>
+        <option value="ready" <%= filters.invoice_state === 'ready' ? 'selected' : '' %>>Ready to Invoice</option>
+        <option value="invoiced" <%= filters.invoice_state === 'invoiced' ? 'selected' : '' %>>Invoiced</option>
+      </select>
+    </div>
     <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Filter</button>
   </div>
 </form>
@@ -95,6 +105,7 @@
         <th class="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Hours</th>
         <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Internal Due</th>
         <th class="px-3 py-2.5 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+        <th class="px-3 py-2.5 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Invoicing</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
@@ -118,6 +129,31 @@
         </td>
         <td class="px-3 py-2.5 text-center">
           <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= STATUS_BADGE[pkg.status] || STATUS_BADGE.not_started %>"><%= pkg.status.replace(/_/g, ' ').toUpperCase() %></span>
+        </td>
+        <td class="px-3 py-2.5 text-center">
+          <% if (pkg.invoiced) { %>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 ring-1 ring-teal-600/20" title="<%= pkg.invoice_number || '' %>">INVOICED</span>
+            <% if (pkg.invoice_number) { %><p class="font-mono text-[10px] text-gray-400 mt-0.5"><%= pkg.invoice_number %></p><% } %>
+          <% } else if (pkg.ready_for_invoice) { %>
+            <div class="flex flex-col items-center gap-1">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 ring-1 ring-amber-600/20">READY</span>
+              <div class="flex items-center gap-1.5">
+                <% if (canMarkInvoiced) { %>
+                <form method="POST" action="/service-packages/<%= pkg.id %>/mark-invoiced" class="inline-flex items-center gap-1"><%- include('../partials/csrf') %>
+                  <input type="text" name="invoice_number" required placeholder="INV-" class="w-20 px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[10px] font-mono focus:outline-none focus:ring-1 focus:ring-brand-500">
+                  <button type="submit" class="text-teal-700 hover:text-teal-800 text-[11px] font-semibold">Invoiced</button>
+                </form>
+                <% } %>
+                <form method="POST" action="/service-packages/<%= pkg.id %>/unmark-invoice" class="inline"><%- include('../partials/csrf') %>
+                  <button type="submit" class="text-gray-300 hover:text-red-600 text-[11px]" title="Remove from queue">✕</button>
+                </form>
+              </div>
+            </div>
+          <% } else { %>
+            <form method="POST" action="/service-packages/<%= pkg.id %>/ready-for-invoice" class="inline"><%- include('../partials/csrf') %>
+              <button type="submit" class="text-brand-600 hover:text-brand-700 text-[11px] font-semibold">Queue for Invoice</button>
+            </form>
+          <% } %>
         </td>
       </tr>
       <% }) %>

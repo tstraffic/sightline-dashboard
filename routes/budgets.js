@@ -30,10 +30,27 @@ router.get('/', (req, res) => {
   const overBudgetCount = budgets.filter(b => b.contract_value > 0 && b.total_spent > b.contract_value).length;
   const overallMargin = totalContract > 0 ? ((totalContract - totalSpent) / totalContract * 100) : 0;
 
+  // Ready-to-invoice queue (brief §10.1) — packages queued by delivery,
+  // waiting on finance to raise the Xero invoice. Lives here (not a
+  // query-string sidebar link) so the customiser stays happy.
+  let readyQueue = [];
+  try {
+    readyQueue = db.prepare(`
+      SELECT sp.id, sp.package_ref, sp.fee_allocation, sp.ready_for_invoice_at,
+        j.id AS job_id, j.job_number, j.client, u.full_name AS queued_by_name
+      FROM service_packages sp
+      JOIN jobs j ON sp.job_id = j.id
+      LEFT JOIN users u ON sp.ready_for_invoice_by = u.id
+      WHERE COALESCE(sp.ready_for_invoice, 0) = 1 AND COALESCE(sp.invoiced, 0) = 0
+      ORDER BY sp.ready_for_invoice_at
+    `).all();
+  } catch (e) { /* columns land with migration 362 */ }
+
   res.render('budgets/index', {
     title: 'Budget & Cost Tracking',
     currentPage: 'budgets',
     budgets,
+    readyQueue,
     totals: { contract: totalContract, spent: totalSpent, budget: totalBudget, overBudgetCount, overallMargin }
   });
 });

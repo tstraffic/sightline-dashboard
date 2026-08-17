@@ -5,22 +5,33 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
+const { createNotification } = require('../middleware/create-notification');
 const { generateServicePackageRef } = require('../lib/refNumbers');
 const { sydneyToday } = require('../lib/sydney');
 
 const PKG_STATUSES = ['not_started', 'in_progress', 'on_hold', 'completed'];
 
+// Marking a package as actually invoiced is a books operation (brief §10.1)
+// — mirror the compliance module's gate.
+function canMarkInvoiced(user) {
+  const role = String((user && user.role) || '').toLowerCase();
+  return ['admin', 'finance', 'accounts'].includes(role);
+}
+
 // Register
 router.get('/', (req, res, next) => {
   try {
     const db = getDb();
-    const { stream, status, owner, job_id, search } = req.query;
+    const { stream, status, owner, job_id, search, invoice_state } = req.query;
     let where = [];
     const params = [];
     if (stream) { where.push('sp.service_stream = ?'); params.push(stream); }
     if (status) { where.push('sp.status = ?'); params.push(status); }
     if (owner) { where.push('sp.owner_id = ?'); params.push(owner); }
     if (job_id) { where.push('sp.job_id = ?'); params.push(job_id); }
+    if (invoice_state === 'pending') { where.push('COALESCE(sp.ready_for_invoice, 0) = 0 AND COALESCE(sp.invoiced, 0) = 0'); }
+    if (invoice_state === 'ready') { where.push('COALESCE(sp.ready_for_invoice, 0) = 1 AND COALESCE(sp.invoiced, 0) = 0'); }
+    if (invoice_state === 'invoiced') { where.push('COALESCE(sp.invoiced, 0) = 1'); }
     if (search) {
       where.push('(sp.package_ref LIKE ? OR sp.scope LIKE ? OR j.job_number LIKE ? OR j.project_name LIKE ?)');
       const s = `%${search}%`;
@@ -41,7 +52,9 @@ router.get('/', (req, res, next) => {
         SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
         SUM(CASE WHEN status NOT IN ('completed') AND internal_due_date IS NOT NULL AND internal_due_date < ? THEN 1 ELSE 0 END) AS overdue,
-        COALESCE(SUM(fee_allocation), 0) AS total_fees
+        COALESCE(SUM(fee_allocation), 0) AS total_fees,
+        SUM(CASE WHEN COALESCE(ready_for_invoice, 0) = 1 AND COALESCE(invoiced, 0) = 0 THEN 1 ELSE 0 END) AS ready_to_invoice,
+        COALESCE(SUM(CASE WHEN COALESCE(ready_for_invoice, 0) = 1 AND COALESCE(invoiced, 0) = 0 THEN fee_allocation ELSE 0 END), 0) AS ready_value
       FROM service_packages
     `).get(sydneyToday());
 
@@ -54,7 +67,8 @@ router.get('/', (req, res, next) => {
       stats,
       users,
       statuses: PKG_STATUSES,
-      filters: { stream, status, owner, job_id, search },
+      canMarkInvoiced: canMarkInvoiced(req.session.user),
+      filters: { stream, status, owner, job_id, search, invoice_state },
     });
   } catch (err) { next(err); }
 });
@@ -137,6 +151,102 @@ router.post('/:id', (req, res) => {
     req.flash('error', 'Failed to update package: ' + err.message);
     req.session.save(() => res.redirect(b.return_to || '/service-packages'));
   }
+});
+
+// ---- Invoice readiness (brief §10.1, compliance idiom) ----
+
+// Anyone with project access can queue work for invoicing (un-gated by
+// design — the gate is on marking it actually invoiced).
+router.post('/:id/ready-for-invoice', (req, res) => {
+  const db = getDb();
+  const pkg = db.prepare('SELECT sp.*, j.job_number FROM service_packages sp JOIN jobs j ON sp.job_id = j.id WHERE sp.id = ?').get(req.params.id);
+  const back = req.body.return_to || '/service-packages';
+  if (!pkg) {
+    req.flash('error', 'Package not found.');
+    return req.session.save(() => res.redirect('/service-packages'));
+  }
+  if (pkg.invoiced) {
+    req.flash('error', `${pkg.package_ref} is already invoiced.`);
+    return req.session.save(() => res.redirect(back));
+  }
+  db.prepare('UPDATE service_packages SET ready_for_invoice = 1, ready_for_invoice_at = CURRENT_TIMESTAMP, ready_for_invoice_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(req.session.user.id, pkg.id);
+  logActivity({
+    user: req.session.user, action: 'update', entityType: 'service_package',
+    entityId: pkg.id, entityLabel: pkg.package_ref,
+    jobId: pkg.job_id, jobNumber: pkg.job_number, details: 'Marked ready to invoice', ip: req.ip,
+  });
+  // Surface to the finance queue — never a raw notifications INSERT.
+  try {
+    const financeUsers = db.prepare("SELECT id FROM users WHERE active = 1 AND LOWER(role) IN ('admin','finance','accounts')").all();
+    financeUsers.forEach(u => {
+      if (u.id === req.session.user.id) return;
+      createNotification({
+        userId: u.id, type: 'invoice_ready',
+        title: `Ready to invoice: ${pkg.package_ref}`,
+        message: `${req.session.user.full_name || 'Someone'} queued ${pkg.package_ref} ($${(pkg.fee_allocation || 0).toLocaleString('en-AU')}) on ${pkg.job_number} for invoicing.`,
+        link: '/budgets', jobId: pkg.job_id, deduplicate: true,
+      });
+    });
+  } catch (e) { console.error('[Packages] invoice_ready notify error:', e.message); }
+  req.flash('success', `${pkg.package_ref} queued for invoicing — finance can see it on Budgets & Costs.`);
+  req.session.save(() => res.redirect(back));
+});
+
+// Take it back out of the queue (not once actually invoiced).
+router.post('/:id/unmark-invoice', (req, res) => {
+  const db = getDb();
+  const pkg = db.prepare('SELECT sp.*, j.job_number FROM service_packages sp JOIN jobs j ON sp.job_id = j.id WHERE sp.id = ?').get(req.params.id);
+  const back = req.body.return_to || '/service-packages';
+  if (!pkg) {
+    req.flash('error', 'Package not found.');
+    return req.session.save(() => res.redirect('/service-packages'));
+  }
+  if (pkg.invoiced) {
+    req.flash('error', `${pkg.package_ref} is already invoiced — only admin/finance can change invoiced records.`);
+    return req.session.save(() => res.redirect(back));
+  }
+  db.prepare('UPDATE service_packages SET ready_for_invoice = 0, ready_for_invoice_at = NULL, ready_for_invoice_by = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(pkg.id);
+  logActivity({
+    user: req.session.user, action: 'update', entityType: 'service_package',
+    entityId: pkg.id, entityLabel: pkg.package_ref,
+    jobId: pkg.job_id, jobNumber: pkg.job_number, details: 'Removed from invoice queue', ip: req.ip,
+  });
+  req.flash('success', `${pkg.package_ref} removed from the invoice queue.`);
+  req.session.save(() => res.redirect(back));
+});
+
+// Record that the Xero invoice went out — books operation, role-gated.
+router.post('/:id/mark-invoiced', (req, res) => {
+  const db = getDb();
+  const pkg = db.prepare('SELECT sp.*, j.job_number FROM service_packages sp JOIN jobs j ON sp.job_id = j.id WHERE sp.id = ?').get(req.params.id);
+  const back = req.body.return_to || '/service-packages';
+  if (!pkg) {
+    req.flash('error', 'Package not found.');
+    return req.session.save(() => res.redirect('/service-packages'));
+  }
+  if (!canMarkInvoiced(req.session.user)) {
+    req.flash('error', 'Only admin/finance/accounts can mark work invoiced.');
+    return req.session.save(() => res.redirect(back));
+  }
+  const invoiceNumber = (req.body.invoice_number || '').trim();
+  if (!invoiceNumber) {
+    req.flash('error', 'Record the Xero invoice number when marking invoiced.');
+    return req.session.save(() => res.redirect(back));
+  }
+  db.prepare(`
+    UPDATE service_packages SET invoiced = 1, invoiced_at = CURRENT_TIMESTAMP, invoiced_by_id = ?,
+      invoice_number = ?, ready_for_invoice = 1,
+      ready_for_invoice_at = COALESCE(ready_for_invoice_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(req.session.user.id, invoiceNumber, pkg.id);
+  logActivity({
+    user: req.session.user, action: 'update', entityType: 'service_package',
+    entityId: pkg.id, entityLabel: pkg.package_ref,
+    jobId: pkg.job_id, jobNumber: pkg.job_number, details: `Invoiced · ${invoiceNumber}`, ip: req.ip,
+  });
+  req.flash('success', `${pkg.package_ref} marked invoiced (${invoiceNumber}).`);
+  req.session.save(() => res.redirect(back));
 });
 
 // Delete

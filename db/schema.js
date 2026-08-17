@@ -16258,6 +16258,29 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 361 error:', e.message); }
   }
 
+  // Migration 362: invoice readiness on service packages (brief §10.1,
+  // compliance-module column shape) + jobs.closeout_exception for the §6.3
+  // authorised-exception closeout gate.
+  if (!isMigrationApplied.get(362)) {
+    try {
+      const spCols = db.prepare('PRAGMA table_info(service_packages)').all().map(c => c.name);
+      const addSp = (col, ddl) => { if (!spCols.includes(col)) db.exec(`ALTER TABLE service_packages ADD COLUMN ${ddl}`); };
+      addSp('ready_for_invoice', 'ready_for_invoice INTEGER DEFAULT 0');
+      addSp('ready_for_invoice_at', 'ready_for_invoice_at DATETIME');
+      addSp('ready_for_invoice_by', 'ready_for_invoice_by INTEGER REFERENCES users(id)');
+      addSp('invoiced', 'invoiced INTEGER DEFAULT 0');
+      addSp('invoiced_at', 'invoiced_at DATETIME');
+      addSp('invoiced_by_id', 'invoiced_by_id INTEGER REFERENCES users(id)');
+      addSp('invoice_number', "invoice_number TEXT DEFAULT ''");
+      const jobCols362 = db.prepare('PRAGMA table_info(jobs)').all().map(c => c.name);
+      if (!jobCols362.includes('closeout_exception')) {
+        db.exec("ALTER TABLE jobs ADD COLUMN closeout_exception TEXT DEFAULT ''");
+      }
+      recordMigration.run(362, 'Sightline invoice readiness + closeout exception');
+      console.log('Migration 362 applied: service_packages invoice columns + jobs.closeout_exception');
+    } catch (e) { console.error('Migration 362 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

@@ -839,6 +839,29 @@ function generateNotifications() {
       }
     } catch (e) { console.error('[notifications] won-unconverted step failed:', e.message); }
 
+    // S10. Invoice-readiness prompt (brief §10.1) — a COMPLETED service
+    // package that nobody has queued for invoicing (or invoiced) is
+    // finished work earning nothing. Prompt the package owner (else the
+    // Project Director) to queue it for finance.
+    try {
+      const unqueued = db.prepare(`
+        SELECT sp.id, sp.package_ref, sp.fee_allocation, sp.owner_id,
+          j.id AS job_id, j.job_number, j.project_manager_id
+        FROM service_packages sp
+        JOIN jobs j ON sp.job_id = j.id
+        WHERE sp.status = 'completed'
+          AND COALESCE(sp.ready_for_invoice, 0) = 0 AND COALESCE(sp.invoiced, 0) = 0
+          AND j.status NOT IN ('closed', 'cancelled')
+      `).all();
+      for (const p of unqueued) {
+        const recipient = p.owner_id || p.project_manager_id;
+        if (!recipient) continue;
+        const title = `Completed — queue for invoicing: ${p.package_ref}`;
+        const message = `${p.package_ref} on ${p.job_number} is completed ($${(p.fee_allocation || 0).toLocaleString('en-AU')}) but hasn't been queued for invoicing. Mark it ready so finance can bill it.`;
+        insertAndTrack(recipient, 'invoice_ready', title, message, '/service-packages?invoice_state=pending', p.job_id);
+      }
+    } catch (e) { console.error('[notifications] invoice-readiness step failed:', e.message); }
+
     // Send immediate email notifications for newly created notifications
     sendImmediateEmails(db, newNotificationIds);
 
