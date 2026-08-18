@@ -10,7 +10,7 @@
 <%- include('../partials/page-header', {
   eyebrow: job.job_number + (job.project_name ? ' · ' + job.project_name : ''),
   title: 'Time & WIP',
-  subtitle: 'Budget vs actual, work in progress and recovery for this project (brief §5.9).',
+  subtitle: 'Budget vs actual, work in progress and recovery for this project.',
   actions: [
     { label: 'My Time', href: '/time', style: 'secondary' },
     { label: 'Project', href: '/jobs/' + job.id + '#budget', style: 'secondary' },
@@ -120,9 +120,9 @@
 <% } else { %>
 
 <%- include('../partials/page-header', {
-  eyebrow: 'Delivery',
+  eyebrow: 'Plans & Approvals',
   title: 'My Time',
-  subtitle: 'Log hours against projects with the standard activity codes (brief §5.15) — budget vs actual and WIP roll up from here.',
+  subtitle: 'Log hours against projects with the standard activity codes — budget vs actual and WIP roll up from here.',
 }) %>
 
 <%- include('../partials/delivery-tabs') %>

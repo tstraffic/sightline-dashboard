@@ -4,7 +4,7 @@
 <%- include('../partials/page-header', {
   eyebrow: job.job_number + (job.project_name ? ' · ' + job.project_name : ''),
   title: isEdit ? 'Edit ' + item.corr_ref : 'Log Correspondence',
-  subtitle: 'Material correspondence only — the reference, who said what, and the action it demands (brief §5.11).',
+  subtitle: 'Material correspondence only — the reference, who said what, and the action it demands.',
   actions: [{ label: 'Back to Correspondence', href: '/correspondence' + (job.id ? '?job_id=' + job.id : ''), style: 'secondary' }]
 }) %>
 

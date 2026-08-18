@@ -5,7 +5,7 @@
 <%- include('../partials/page-header', {
   eyebrow: job.job_number + (job.project_name ? ' · ' + job.project_name : ''),
   title: isEdit ? 'Edit ' + variation.variation_ref : 'New Variation',
-  subtitle: 'Scope change record — raise it BEFORE absorbing the extra work; approved fees roll into the contract total (brief §5.8).',
+  subtitle: 'Scope change record — raise it before absorbing the extra work; approved fees roll into the contract total.',
   actions: [{ label: 'Back to Variations', href: '/variations' + (job.id ? '?job_id=' + job.id : ''), style: 'secondary' }]
 }) %>
 

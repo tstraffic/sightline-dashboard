@@ -17,52 +17,42 @@
   };
   const live = !['closed','superseded'].includes(deliverable.status);
   const canApproveHere = currentRev && (isQaAdmin || (currentRev.approver_id && user && currentRev.approver_id === user.id));
+
+  // Header actions as a rawActions string — page-header can't run EJS forms,
+  // so the CSRF hidden input is inlined (exactly what partials/csrf renders).
+  const __csrf = '<input type="hidden" name="_csrf" value="' + (typeof csrfToken !== 'undefined' ? csrfToken : '') + '">';
+  let headerActions = '';
+  if (live) {
+    const canIssue = currentRev && currentRev.status === 'approved';
+    headerActions += '<button type="button" onclick="document.getElementById(\'issue-panel\').classList.toggle(\'hidden\')" class="inline-flex items-center px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors ' + (canIssue ? 'bg-brand-600 hover:bg-brand-500' : 'bg-gray-300 cursor-not-allowed') + '"' + (canIssue ? '' : ' disabled title="QA must be complete before issuing"') + '>Issue…</button>';
+    headerActions += '<button type="button" onclick="document.getElementById(\'revision-panel\').classList.toggle(\'hidden\')" class="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">New Revision…</button>';
+    headerActions += '<form method="POST" action="/deliverables/' + deliverable.id + '/close" class="inline" onsubmit="return confirm(\'Close this deliverable?\')">' + __csrf + '<button type="submit" class="inline-flex items-center px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-500 text-sm font-medium rounded-lg transition-colors">Close</button></form>';
+  } else {
+    headerActions += '<form method="POST" action="/deliverables/' + deliverable.id + '/reopen" class="inline">' + __csrf + '<button type="submit" class="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Reopen</button></form>';
+  }
+  if (!issues.length) {
+    headerActions += '<form method="POST" action="/deliverables/' + deliverable.id + '/delete" class="inline" onsubmit="return confirm(\'Delete this deliverable and its revisions?\')">' + __csrf + '<button type="submit" class="inline-flex items-center px-3 py-2 bg-gray-100 hover:bg-red-50 text-gray-400 hover:text-red-600 text-sm font-medium rounded-lg transition-colors" title="Delete (only possible before first issue)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button></form>';
+  }
 %>
 
-<!-- Header -->
-<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
-  <div>
-    <div class="flex items-center gap-2 mb-1 flex-wrap">
-      <a href="/deliverables" class="text-gray-400 hover:text-gray-600 transition">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-      </a>
-      <h1 class="text-2xl font-bold text-gray-900 font-mono"><%= deliverable.deliverable_ref %></h1>
-      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= STATUS_BADGE[deliverable.status] %>"><%= deliverable.status.replace(/_/g,' ').toUpperCase() %></span>
-      <% if (currentRev) { %><span class="text-xs text-gray-400 font-mono">Rev <%= currentRev.revision_label %></span><% } %>
-    </div>
-    <p class="text-sm text-gray-500 ml-7">
-      <%= deliverable.title %> ·
-      <a href="/jobs/<%= deliverable.job_id %>#deliverables" class="text-brand-600 hover:text-brand-700 font-medium"><%= deliverable.job_number %></a>
-      <% if (deliverable.package_ref) { %> · <span class="font-mono text-xs"><%= deliverable.package_ref %></span><% } %>
-      <% if (deliverable.sharepoint_working_url) { %> · <a href="<%= deliverable.sharepoint_working_url %>" target="_blank" rel="noopener" class="text-brand-600 hover:text-brand-700">Working ↗</a><% } %>
-      <% if (deliverable.sharepoint_issued_url) { %> · <a href="<%= deliverable.sharepoint_issued_url %>" target="_blank" rel="noopener" class="text-brand-600 hover:text-brand-700">Issued ↗</a><% } %>
-    </p>
-  </div>
-  <div class="flex items-center gap-2 flex-wrap">
-    <% if (live) { %>
-      <button type="button" onclick="document.getElementById('issue-panel').classList.toggle('hidden')"
-        class="inline-flex items-center px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors <%= currentRev && currentRev.status === 'approved' ? 'bg-brand-600 hover:bg-brand-500' : 'bg-gray-300 cursor-not-allowed' %>"
-        <%= currentRev && currentRev.status === 'approved' ? '' : 'disabled title="QA must be complete before issuing"' %>>Issue…</button>
-      <button type="button" onclick="document.getElementById('revision-panel').classList.toggle('hidden')" class="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">New Revision…</button>
-      <form method="POST" action="/deliverables/<%= deliverable.id %>/close" class="inline" onsubmit="return confirm('Close this deliverable?')">
-        <%- include('../partials/csrf') %>
-        <button type="submit" class="inline-flex items-center px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-500 text-sm font-medium rounded-lg transition-colors">Close</button>
-      </form>
-    <% } else { %>
-      <form method="POST" action="/deliverables/<%= deliverable.id %>/reopen" class="inline">
-        <%- include('../partials/csrf') %>
-        <button type="submit" class="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Reopen</button>
-      </form>
-    <% } %>
-    <% if (!issues.length) { %>
-      <form method="POST" action="/deliverables/<%= deliverable.id %>/delete" class="inline" onsubmit="return confirm('Delete this deliverable and its revisions?')">
-        <%- include('../partials/csrf') %>
-        <button type="submit" class="inline-flex items-center px-3 py-2 bg-gray-100 hover:bg-red-50 text-gray-400 hover:text-red-600 text-sm font-medium rounded-lg transition-colors" title="Delete (only possible before first issue)">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-        </button>
-      </form>
-    <% } %>
-  </div>
+<%- include('../partials/page-header', {
+  eyebrow: 'Plans & Approvals · ' + deliverable.deliverable_ref,
+  title: deliverable.title,
+  rawActions: headerActions,
+  wrapperClass: 'mb-2',
+}) %>
+
+<!-- Meta strip: status, revision, project and file links -->
+<div class="flex items-center gap-2 flex-wrap mb-5 text-sm text-gray-500">
+  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= STATUS_BADGE[deliverable.status] %>"><%= deliverable.status.replace(/_/g,' ').toUpperCase() %></span>
+  <% if (currentRev) { %><span class="text-xs text-gray-400 font-mono">Rev <%= currentRev.revision_label %></span><% } %>
+  <span class="text-gray-300">·</span>
+  <a href="/jobs/<%= deliverable.job_id %>#deliverables" class="text-brand-600 hover:text-brand-700 font-medium"><%= deliverable.job_number %></a>
+  <% if (deliverable.package_ref) { %><span class="text-gray-300">·</span><span class="font-mono text-xs"><%= deliverable.package_ref %></span><% } %>
+  <% if (deliverable.sharepoint_working_url) { %><span class="text-gray-300">·</span><a href="<%= deliverable.sharepoint_working_url %>" target="_blank" rel="noopener" class="text-brand-600 hover:text-brand-700">Working ↗</a><% } %>
+  <% if (deliverable.sharepoint_issued_url) { %><span class="text-gray-300">·</span><a href="<%= deliverable.sharepoint_issued_url %>" target="_blank" rel="noopener" class="text-brand-600 hover:text-brand-700">Issued ↗</a><% } %>
+  <span class="text-gray-300">·</span>
+  <a href="/deliverables" class="text-gray-400 hover:text-gray-600 text-xs">← All deliverables</a>
 </div>
 
 <!-- Issue panel -->
@@ -93,7 +83,7 @@
     </div>
     <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Record Issue</button>
   </form>
-  <p class="text-[10px] text-gray-400 mt-2">The issue register is permanent — it answers exactly what was issued, to whom and when (brief §5.5).</p>
+  <p class="text-[10px] text-gray-400 mt-2">The issue register is permanent — it answers exactly what was issued, to whom and when.</p>
 </div>
 
 <!-- New revision panel -->

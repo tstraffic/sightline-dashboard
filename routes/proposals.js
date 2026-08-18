@@ -103,7 +103,7 @@ router.get('/new', (req, res, next) => {
     const db = getDb();
     const oppId = req.query.opportunity_id;
     if (!oppId) {
-      req.flash('error', 'Start a proposal from its opportunity (brief §3.1 — proposals belong to opportunities).');
+      req.flash('error', 'Start a proposal from its opportunity — proposals belong to opportunities.');
       return req.session.save(() => res.redirect('/opportunities'));
     }
     const opportunity = db.prepare(`
@@ -286,7 +286,7 @@ router.post('/:id/send', (req, res) => {
     }
     const followUp = req.body.follow_up_date;
     if (!followUp) {
-      req.flash('error', 'A follow-up date is required when marking a proposal sent (brief §3.6).');
+      req.flash('error', 'A follow-up date is required when marking a proposal sent.');
       return req.session.save(() => res.redirect('/proposals/' + proposal.id));
     }
     if (!(proposal.fee > 0)) {

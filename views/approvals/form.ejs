@@ -4,7 +4,7 @@
 <%- include('../partials/page-header', {
   eyebrow: job.job_number + (job.project_name ? ' · ' + job.project_name : ''),
   title: isEdit ? 'Edit ' + approval.approval_ref : 'New Approval',
-  subtitle: 'Permit / authority approval tracking — submissions, information requests, conditions and expiry (brief §5.7).',
+  subtitle: 'Permit / authority approval tracking — submissions, information requests, conditions and expiry.',
   actions: [{ label: 'Back to Approvals', href: '/approvals' + (job.id ? '?job_id=' + job.id : ''), style: 'secondary' }]
 }) %>
 
