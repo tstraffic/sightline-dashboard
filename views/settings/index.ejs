@@ -1,12 +1,10 @@
 <% locals.currentPage = 'settings' %>
 
-<!-- Page Header -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Settings</h1>
-    <p class="text-gray-500 text-sm mt-0.5">Configure operational parameters and system options</p>
-  </div>
-</div>
+<%- include('../partials/page-header', { rail: true,
+  eyebrow: 'Admin',
+  title: 'Settings',
+  subtitle: 'Configure operational parameters and system options',
+}) %>
 
 <!-- System Configuration Card -->
 <a href="/settings/system" class="block bg-white border border-gray-200 rounded-xl shadow-sm p-4 hover:border-brand-400 hover:shadow-md transition-all group mb-5">

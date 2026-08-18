@@ -41,15 +41,12 @@
 %>
 
 <div class="space-y-5">
-  <div>
-    <div class="flex items-center gap-2 text-sm text-gray-400 mb-1">
-      <a href="/admin/users" class="hover:text-gray-900 transition">Admin</a>
-      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-      <span class="text-gray-900">Role Permissions</span>
-    </div>
-    <h1 class="text-2xl font-bold text-gray-900">Role Permissions</h1>
-    <p class="text-sm text-gray-500 mt-1">Toggle which modules each role can see. Changes apply immediately. Admin is always allowed and can&rsquo;t be locked out.</p>
-  </div>
+  <%- include('../partials/page-header', { rail: true, wrapperClass: '',
+    eyebrow: 'Admin',
+    title: 'Role Permissions',
+    subtitle: 'Toggle which modules each role can see. Changes apply immediately. Admin is always allowed and can\'t be locked out.',
+    actions: [{ label: '← Back to Admin', href: '/admin/users', style: 'secondary' }],
+  }) %>
 
   <!-- Helper banner -->
   <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-900 flex items-start gap-3">

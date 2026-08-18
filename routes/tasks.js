@@ -246,6 +246,7 @@ router.get('/', (req, res) => {
   } catch (e) { /* deleted_at column may not exist pre-migration */ }
 
   res.render('tasks/index', {
+    currentPage: 'tasks',
     title: 'Tasks & Actions',
     tasks,
     jobs,
@@ -282,6 +283,7 @@ router.get('/deleted', (req, res) => {
   `).all();
 
   res.render('tasks/deleted', {
+    currentPage: 'tasks',
     title: 'Deleted Tasks',
     tasks,
     user: req.session.user,
@@ -345,7 +347,7 @@ router.get('/new', (req, res) => {
   const users = db.prepare("SELECT id, full_name, role FROM users WHERE active = 1 AND username != 'admin' ORDER BY full_name").all();
   let tenders = [];
   try { tenders = db.prepare("SELECT id, tender_number, title, status FROM tenders WHERE status IN ('open','submitted','won') ORDER BY id DESC").all(); } catch (e) {}
-  res.render('tasks/form', { title: 'New Task', task: null, jobs, users, tenders, user: req.session.user,
+  res.render('tasks/form', { currentPage: 'tasks', title: 'New Task', task: null, jobs, users, tenders, user: req.session.user,
     prefillJobId: req.query.job_id || '', prefillTenderId: req.query.tender_id || '' });
 });
 
@@ -653,7 +655,7 @@ router.get('/:id/edit', (req, res) => {
   }
   task.owners = taskOwners;
 
-  res.render('tasks/form', { title: 'Edit Task', task, jobs, users, tenders, user: req.session.user, prefillJobId: '', prefillTenderId: '', editable, viewable, subtasks, comments, watchers, dependencies, dependents, allTasks, activityLog, linkedCompliance });
+  res.render('tasks/form', { currentPage: 'tasks', title: 'Edit Task', task, jobs, users, tenders, user: req.session.user, prefillJobId: '', prefillTenderId: '', editable, viewable, subtasks, comments, watchers, dependencies, dependents, allTasks, activityLog, linkedCompliance });
 });
 
 // POST /:id — Update task

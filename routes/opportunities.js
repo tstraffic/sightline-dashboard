@@ -128,7 +128,7 @@ router.get('/', (req, res, next) => {
 
     res.render('opportunities/index', {
       title: 'Opportunities',
-      currentPage: 'pipeline',
+      currentPage: 'opportunities',
       opportunities,
       stats,
       users,
@@ -196,7 +196,7 @@ router.get('/new', (req, res, next) => {
 
     res.render('opportunities/form', {
       title: 'New Opportunity',
-      currentPage: 'pipeline',
+      currentPage: 'opportunities',
       opportunity: null,
       clients,
       users,
@@ -380,7 +380,7 @@ router.get('/:id', (req, res, next) => {
 
     res.render('opportunities/show', {
       title: opportunity.opportunity_number + ' - ' + opportunity.title,
-      currentPage: 'pipeline',
+      currentPage: 'opportunities',
       opportunity,
       activities,
       relatedJob,
@@ -409,7 +409,7 @@ router.get('/:id/edit', (req, res, next) => {
 
     res.render('opportunities/form', {
       title: 'Edit ' + opportunity.opportunity_number,
-      currentPage: 'pipeline',
+      currentPage: 'opportunities',
       opportunity,
       clients,
       users,
@@ -748,7 +748,7 @@ router.get('/:id/convert', (req, res, next) => {
     const users = db.prepare('SELECT id, full_name FROM users WHERE active = 1 ORDER BY full_name').all();
     res.render('opportunities/convert', {
       title: 'Convert ' + ctx.opportunity.opportunity_number,
-      currentPage: 'pipeline',
+      currentPage: 'opportunities',
       opportunity: ctx.opportunity,
       acceptedProposal: ctx.acceptedProposal,
       proposalPackages: ctx.proposalPackages,

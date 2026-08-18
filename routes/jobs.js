@@ -127,7 +127,7 @@ router.get('/new', (req, res) => {
   const db = getDb();
   const users = db.prepare('SELECT id, full_name, role FROM users WHERE active = 1 ORDER BY full_name').all();
   const clients = db.prepare('SELECT id, company_name FROM clients WHERE active = 1 ORDER BY company_name').all();
-  res.render('jobs/form', { title: 'Create New Job', job: null, users, clients, user: req.session.user });
+  res.render('jobs/form', { currentPage: 'projects', title: 'Create New Job', job: null, users, clients, user: req.session.user });
 });
 
 // Create job
@@ -677,6 +677,7 @@ router.get('/:id', (req, res) => {
   }
 
   res.render('jobs/show', {
+    currentPage: 'projects',
     title: job.job_number,
     job, tasks, complianceItems, subPlansByParent, deliveryDocs, accountsDocs,
     incidents, contacts, timesheets, budget, costEntries, totalSpend,
@@ -701,7 +702,7 @@ router.get('/:id/edit', (req, res) => {
   // actual_hours goes read-only once time entries own it (lib/wip.js).
   let jobHasTime = false;
   try { jobHasTime = require('../lib/wip').jobHasTimeEntries(db, job.id); } catch (e) {}
-  res.render('jobs/form', { title: 'Edit Job', job, users, clients, jobHasTime, user: req.session.user });
+  res.render('jobs/form', { currentPage: 'projects', title: 'Edit Job', job, users, clients, jobHasTime, user: req.session.user });
 });
 
 // Update job
@@ -980,6 +981,7 @@ router.get('/:id/documents', (req, res) => {
     ORDER BY uploaded_at DESC
   `).all(job.id);
   res.render('job-documents', {
+    currentPage: 'projects',
     title: 'Site Documents — ' + (job.job_number || job.job_name),
     job,
     docs,

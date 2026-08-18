@@ -91,6 +91,7 @@ router.get('/', (req, res) => {
 
   const users = db.prepare('SELECT id, full_name FROM users WHERE active = 1 ORDER BY full_name').all();
   res.render('projects/index', {
+    currentPage: 'projects',
     title: 'Project Register',
     jobs, suburbs, filters: { status, search, suburb, stream, owner: ownerFilter, risk },
     clientGroups,
@@ -106,7 +107,7 @@ router.get('/new', (req, res) => {
   const users = db.prepare('SELECT id, full_name, role FROM users WHERE active = 1 ORDER BY full_name').all();
   const clients = db.prepare('SELECT id, company_name FROM clients WHERE active = 1 ORDER BY company_name').all();
   const preselectedClientId = req.query.client_id || null;
-  res.render('projects/form', { title: 'Create New Project', job: null, users, clients, preselectedClientId, user: req.session.user });
+  res.render('projects/form', { currentPage: 'projects', title: 'Create New Project', job: null, users, clients, preselectedClientId, user: req.session.user });
 });
 
 // Create project (or — if monthly_package is on — a job per selected month)
@@ -542,6 +543,7 @@ router.get('/:id', (req, res) => {
   }
 
   res.render('jobs/show', {
+    currentPage: 'projects',
     title: job.job_number,
     job, tasks, complianceItems, subPlansByParent, deliveryDocs, accountsDocs,
     incidents, contacts, timesheets, budget, costEntries, totalSpend,
@@ -563,7 +565,7 @@ router.get('/:id/edit', (req, res) => {
   if (!job) { req.flash('error', 'Project not found.'); return req.session.save(() => res.redirect('/projects')); }
   const users = db.prepare('SELECT id, full_name, role FROM users WHERE active = 1 ORDER BY full_name').all();
   const clients = db.prepare('SELECT id, company_name FROM clients WHERE active = 1 ORDER BY company_name').all();
-  res.render('projects/form', { title: 'Edit Project', job, users, clients, preselectedClientId: null, user: req.session.user });
+  res.render('projects/form', { currentPage: 'projects', title: 'Edit Project', job, users, clients, preselectedClientId: null, user: req.session.user });
 });
 
 // Update project
