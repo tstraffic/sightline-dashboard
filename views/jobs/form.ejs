@@ -715,85 +715,186 @@ function showJobClientCreated(name) {
   setTimeout(function () { if (note && note.parentNode) { note.style.transition = 'opacity .3s'; note.style.opacity = '0'; setTimeout(function () { note.remove(); }, 300); } }, 4000);
 }
 
-// Address autocomplete (Photon by Komoot — fast, free, based on OSM, no API key)
+// Address autocomplete — Google Places when an API key is configured in
+// Admin → Integrations (proxied via /api/address-suggest, full AU street-
+// number coverage), otherwise Photon (OSM, free, street-level only). The
+// Photon path keeps the street number YOU typed: "9 Epic Pl" → pick
+// "Epic Place, Villawood" → fills "9 Epic Place, Villawood, NSW, 2163".
+// Keyboard: ↑/↓ to highlight, Enter to select (never submits), Esc closes.
 (function() {
   var input = document.getElementById('address_search');
   var results = document.getElementById('address_results');
   var spinner = document.getElementById('address_spinner');
   if (!input) return;
   var timer;
+  var highlighted = -1;
+  var sessionToken = null; // one Google billing session per search
   var stateAbbr = { 'New South Wales': 'NSW', 'Victoria': 'VIC', 'Queensland': 'QLD', 'South Australia': 'SA', 'Western Australia': 'WA', 'Tasmania': 'TAS', 'Northern Territory': 'NT', 'Australian Capital Territory': 'ACT' };
+  // Common AU street-type abbreviations Photon doesn't expand ("st" left
+  // out — too ambiguous with Saint). Google handles these natively.
+  var abbrev = { pl: 'place', rd: 'road', ave: 'avenue', av: 'avenue', hwy: 'highway', cres: 'crescent', dr: 'drive', ct: 'court', pde: 'parade', blvd: 'boulevard', ln: 'lane', tce: 'terrace' };
 
-  input.addEventListener('input', function() {
-    clearTimeout(timer);
-    var q = input.value.trim();
-    if (q.length < 3) { results.classList.add('hidden'); return; }
-    timer = setTimeout(function() {
-      spinner.classList.remove('hidden');
-      // Photon API — biased to Sydney (-33.87, 151.21), Australian results
-      fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&lat=-33.87&lon=151.21&limit=6&lang=en&osm_tag=place&osm_tag=highway&osm_tag=building')
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+  function newToken() {
+    try { return crypto.randomUUID(); } catch (e) { return String(Date.now()) + Math.floor(Math.random() * 1e9); }
+  }
+
+  // One fill path for both providers.
+  function applyAddress(a) {
+    var fullAddr = [a.street, a.suburb, a.state, a.postcode].filter(Boolean).join(', ');
+    document.getElementById('site_address').value = fullAddr;
+    document.getElementById('suburb').value = a.suburb || '';
+    document.getElementById('location_state').value = a.state || '';
+    var stateSelect = document.getElementById('state');
+    if (stateSelect && a.state) {
+      for (var i = 0; i < stateSelect.options.length; i++) {
+        if (stateSelect.options[i].value === a.state) { stateSelect.value = a.state; break; }
+      }
+    }
+    input.value = '';
+    hideResults();
+    sessionToken = null; // selection ends the Google billing session
+  }
+
+  function hideResults() { results.classList.add('hidden'); results.innerHTML = ''; results._rows = null; highlighted = -1; }
+
+  function rowHtml(i, line1, line2) {
+    return '<button type="button" data-idx="' + i + '" class="addr-row" style="width:100%;text-align:left;padding:10px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer;background:none;border-left:0;border-right:0;border-top:0;font-family:inherit;">' +
+      '<div style="font-weight:500;color:#111;font-size:14px;">' + esc(line1) + '</div>' +
+      '<div style="font-size:12px;color:#9ca3af;margin-top:2px;">' + esc(line2) + '</div>' +
+      '</button>';
+  }
+
+  function paintHighlight() {
+    var rows = results.querySelectorAll('button[data-idx]');
+    rows.forEach(function(r, i) { r.style.background = i === highlighted ? '#eff6ff' : 'none'; });
+  }
+
+  function renderRows(rows) {
+    // rows: [{ line1, line2, pick: fn }]
+    if (!rows.length) {
+      results.innerHTML = '<div style="padding:10px 14px;color:#9ca3af;font-size:13px;">No Australian addresses found</div>';
+      results._rows = null;
+      results.classList.remove('hidden');
+      return;
+    }
+    results.innerHTML = rows.map(function(r, i) { return rowHtml(i, r.line1, r.line2); }).join('');
+    results._rows = rows;
+    highlighted = -1;
+    results.classList.remove('hidden');
+  }
+
+  // ---- Photon (free fallback) ----
+  function photonSearch(q) {
+    // Preserve a typed leading street number — Photon has no AU house
+    // numbers, so we re-attach it to street-level matches.
+    var numMatch = q.match(/^(\d+[a-zA-Z]?(?:-\d+)?)\s+(.+)/);
+    var typedNumber = numMatch ? numMatch[1] : '';
+    // Expand street-type abbreviations for better matching.
+    var expanded = q.replace(/\b([a-z]+)\b/gi, function(w) { return abbrev[w.toLowerCase()] || w; });
+    fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(expanded) + '&lat=-33.87&lon=151.21&limit=6&lang=en&bbox=112.9,-43.8,153.7,-9.0')
       .then(function(r) { return r.json(); })
       .then(function(data) {
         spinner.classList.add('hidden');
         var features = (data.features || []).filter(function(f) {
           return f.properties && f.properties.country === 'Australia';
         });
-        if (!features.length) {
-          results.innerHTML = '<div style="padding:10px 14px;color:#9ca3af;font-size:13px;">No Australian addresses found</div>';
-          results.classList.remove('hidden');
-          return;
-        }
-        results.innerHTML = features.map(function(f, i) {
+        renderRows(features.map(function(f) {
           var p = f.properties;
-          var line1 = (p.housenumber ? p.housenumber + ' ' : '') + (p.street || p.name || '');
+          var streetName = p.street || p.name || '';
+          var number = p.housenumber || typedNumber; // keep what the user typed
+          var street = (number ? number + ' ' : '') + streetName;
           var suburb = p.district || p.city || p.locality || '';
-          var state = p.state || '';
-          var stCode = stateAbbr[state] || state;
+          var stCode = stateAbbr[p.state] || p.state || '';
           var postcode = p.postcode || '';
-          return '<button type="button" data-idx="' + i + '" style="width:100%;text-align:left;padding:10px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer;background:none;border-left:0;border-right:0;border-top:0;font-family:inherit;" onmouseover="this.style.background=\'#eff6ff\'" onmouseout="this.style.background=\'none\'">' +
-            '<div style="font-weight:500;color:#111;font-size:14px;">' + (line1 || p.name || suburb) + '</div>' +
-            '<div style="font-size:12px;color:#9ca3af;margin-top:2px;">' + [suburb, stCode, postcode].filter(Boolean).join(', ') + '</div>' +
-            '</button>';
-        }).join('');
-        results.classList.remove('hidden');
-        results._data = features;
+          return {
+            line1: street || suburb,
+            line2: [suburb, stCode, postcode].filter(Boolean).join(', '),
+            pick: function() { applyAddress({ street: street, suburb: suburb, state: stCode, postcode: postcode }); },
+          };
+        }));
       })
       .catch(function() { spinner.classList.add('hidden'); });
+  }
+
+  // ---- Google (via server proxy, needs key in Admin → Integrations) ----
+  function googlePick(s) {
+    spinner.classList.remove('hidden');
+    fetch('/api/address-suggest/details?place_id=' + encodeURIComponent(s.id) + '&sessiontoken=' + encodeURIComponent(sessionToken || ''))
+      .then(function(r) { return r.json(); })
+      .then(function(a) {
+        spinner.classList.add('hidden');
+        if (a && !a.error) applyAddress(a);
+      })
+      .catch(function() { spinner.classList.add('hidden'); });
+  }
+
+  input.addEventListener('input', function() {
+    clearTimeout(timer);
+    var q = input.value.trim();
+    if (q.length < 3) { hideResults(); return; }
+    if (!sessionToken) sessionToken = newToken();
+    timer = setTimeout(function() {
+      spinner.classList.remove('hidden');
+      fetch('/api/address-suggest?q=' + encodeURIComponent(q) + '&sessiontoken=' + encodeURIComponent(sessionToken))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.provider === 'google') {
+            spinner.classList.add('hidden');
+            renderRows((data.suggestions || []).map(function(s) {
+              return { line1: s.label, line2: s.sub, pick: function() { googlePick(s); } };
+            }));
+          } else {
+            photonSearch(q); // free fallback, manages its own spinner
+          }
+        })
+        .catch(function() { photonSearch(q); });
     }, 300);
+  });
+
+  // Keyboard: ↑/↓ highlight, Enter selects highlighted (or first), Esc closes.
+  // Enter in this box must NEVER submit the form or advance the wizard.
+  input.addEventListener('keydown', function(e) {
+    var open = !results.classList.contains('hidden') && results._rows && results._rows.length;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (open) {
+        var idx = highlighted >= 0 ? highlighted : 0;
+        if (results._rows[idx]) results._rows[idx].pick();
+      }
+      return;
+    }
+    if (!open) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      highlighted = (highlighted + 1) % results._rows.length;
+      paintHighlight();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      highlighted = highlighted <= 0 ? results._rows.length - 1 : highlighted - 1;
+      paintHighlight();
+    } else if (e.key === 'Escape') {
+      hideResults();
+    }
   });
 
   results.addEventListener('click', function(e) {
     var btn = e.target.closest('button[data-idx]');
-    if (!btn || !results._data) return;
-    var f = results._data[parseInt(btn.dataset.idx)];
-    var p = f.properties;
-
-    var street = (p.housenumber ? p.housenumber + ' ' : '') + (p.street || p.name || '');
-    var suburb = p.district || p.city || p.locality || '';
-    var state = p.state || '';
-    var stCode = stateAbbr[state] || state;
-    var postcode = p.postcode || '';
-    var fullAddr = [street, suburb, stCode, postcode].filter(Boolean).join(', ');
-
-    document.getElementById('site_address').value = fullAddr;
-    document.getElementById('suburb').value = suburb;
-    document.getElementById('location_state').value = stCode;
-
-    // Set the State dropdown on the Identification step
-    var stateSelect = document.getElementById('state');
-    if (stateSelect) {
-      for (var i = 0; i < stateSelect.options.length; i++) {
-        if (stateSelect.options[i].value === stCode) { stateSelect.value = stCode; break; }
-      }
-    }
-
-    input.value = '';
-    results.classList.add('hidden');
+    if (!btn || !results._rows) return;
+    var row = results._rows[parseInt(btn.dataset.idx)];
+    if (row) row.pick();
+  });
+  results.addEventListener('mouseover', function(e) {
+    var btn = e.target.closest('button[data-idx]');
+    if (!btn) return;
+    highlighted = parseInt(btn.dataset.idx);
+    paintHighlight();
   });
 
   document.addEventListener('click', function(e) {
     if (!e.target.closest('#address_search') && !e.target.closest('#address_results')) {
-      results.classList.add('hidden');
+      hideResults();
     }
   });
 })();

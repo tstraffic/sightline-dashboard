@@ -163,4 +163,4 @@ async function geocodeBackfill({ limit = 500, onlyMissing = false } = {}) {
   return { scanned: rows.length, upgraded, failed, provider: googleKey ? 'google' : 'open_meteo' };
 }
 
-module.exports = { geocodeBookingIfNeeded, geocodeBackfill, geocodeQuery, buildQuery };
+module.exports = { geocodeBookingIfNeeded, geocodeBackfill, geocodeQuery, buildQuery, getGoogleKey };

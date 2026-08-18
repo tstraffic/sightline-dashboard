@@ -466,6 +466,7 @@ app.use('/admin', requireLogin, requirePermission('admin'), require('./routes/ad
 app.use('/admin', requireLogin, requirePermission('admin'), require('./routes/admin'));
 app.use('/settings', requireLogin, requirePermission('settings'), require('./routes/settings'));
 app.use('/api/views', requireLogin, require('./routes/saved-views'));
+app.use('/api/address-suggest', requireLogin, require('./routes/address-suggest'));
 
 // Roster redirects to crew page
 app.get('/roster', requireLogin, (req, res) => res.redirect('/crew'));
