@@ -79,6 +79,50 @@
 </div>
 <% } %>
 
+<!-- Quick log — anyone with project access can record their hours here -->
+<form method="POST" action="/time" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-5">
+  <%- include('../partials/csrf') %>
+  <input type="hidden" name="job_id" value="<%= job.id %>">
+  <input type="hidden" name="return_to" value="/time?job_id=<%= job.id %>">
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Package</label>
+      <select name="service_package_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">—</option>
+        <% packages.forEach(p => { %>
+        <option value="<%= p.id %>"><%= p.package_ref %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Activity</label>
+      <select name="activity_code" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <% codes.forEach(c => { %>
+        <option value="<%= c.key %>"><%= c.label %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Date</label>
+      <input type="date" name="entry_date" value="<%= today %>"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Hours <span class="text-red-500">*</span></label>
+      <input type="number" name="hours" required step="0.25" min="0.25" max="24" placeholder="1.5"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div class="col-span-2 sm:col-span-1">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Description</label>
+      <input type="text" name="description" placeholder="Optional"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+      <button type="submit" class="w-full px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Log Time</button>
+    </div>
+  </div>
+</form>
+
 <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
   <table class="min-w-full text-sm">
     <thead>
@@ -93,11 +137,12 @@
         <th class="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Charge</th>
         <th class="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Cost</th>
         <% } %>
+        <th class="px-3 py-2.5"></th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-100">
       <% if (!entries.length) { %>
-      <tr><td colspan="8" class="px-3 py-8 text-center text-gray-400 text-sm">No time logged against this project yet.</td></tr>
+      <tr><td colspan="9" class="px-3 py-8 text-center text-gray-400 text-sm">No time logged against this project yet — use the form above.</td></tr>
       <% } %>
       <% entries.forEach(e => { %>
       <tr class="hover:bg-gray-50 <%= e.billable ? '' : 'opacity-60' %>">
@@ -111,6 +156,14 @@
         <td class="px-3 py-2 text-right text-gray-500 text-xs tabular-nums"><%= money((e.hours || 0) * (e.charge_rate || 0)) %></td>
         <td class="px-3 py-2 text-right text-gray-500 text-xs tabular-nums"><%= money((e.hours || 0) * (e.cost_rate || 0)) %></td>
         <% } %>
+        <td class="px-3 py-2 text-right w-10">
+          <% if (isAdmin || (user && e.user_id === user.id)) { %>
+          <form method="POST" action="/time/<%= e.id %>/delete" class="inline" onsubmit="return confirm('Delete this time entry?')"><%- include('../partials/csrf') %>
+            <input type="hidden" name="return_to" value="/time?job_id=<%= job.id %>">
+            <button type="submit" class="text-gray-300 hover:text-red-600 text-xs">✕</button>
+          </form>
+          <% } %>
+        </td>
       </tr>
       <% }) %>
     </tbody>

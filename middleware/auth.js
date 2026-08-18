@@ -149,13 +149,13 @@ const PERMISSIONS = {
   planning_plans:     ['admin', 'planning'],              // Traffic Plans tab (drafts, revisions, mark final)
   planning_diary:     ['admin', 'planning', 'operations'],// Site Diary tab
   planning_chat:      ['admin', 'operations', 'planning', 'finance', 'safety', 'hr', 'marketing'], // Chat tab (the old matrix's fallback gave Chat to every role)
-  ops_tasks:          ['admin', 'operations'],            // Tasks tab
+  ops_tasks:          ['admin', 'operations', 'planning', 'finance'], // Tasks tab (Sightline: planners work from it)
   ops_timesheets:     ['admin', 'operations', 'finance'], // Timesheets tab
   ops_incidents:      ['admin', 'operations', 'safety'],  // Incidents tab
   job_final_plans:    ['admin', 'operations', 'planning', 'finance', 'safety'], // Final Plans tab (read-only view; distinct from ops_final_plans below)
   job_safety:         ['admin', 'operations', 'planning', 'safety'], // Safety tab (SWMS/RA/audits/incidents roll-up)
   job_equipment:      ['admin', 'operations'],            // Equipment tab
-  job_contacts:       ['admin', 'operations'],            // Contacts tab
+  job_contacts:       ['admin', 'operations', 'planning', 'finance'], // Contacts tab (Sightline: client contacts are delivery context)
   job_budget:         ['admin', 'operations', 'finance'], // Budget tab
   job_accounts:       ['admin', 'finance'],               // Accounts tab + accounts document library (canViewAccounts delegates here)
   // Sightline Phase 2 job-detail tabs

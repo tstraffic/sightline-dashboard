@@ -64,6 +64,7 @@ router.get('/', (req, res, next) => {
         ORDER BY te.entry_date DESC, te.id DESC
       `).all(job.id);
       const wip = getJobWip(db, job.id, { canSeeCost });
+      const jobPackages = db.prepare('SELECT id, package_ref FROM service_packages WHERE job_id = ? ORDER BY package_ref').all(job.id);
       return res.render('time/index', {
         title: 'Time — ' + job.job_number,
         currentPage: 'time',
@@ -71,7 +72,7 @@ router.get('/', (req, res, next) => {
         job, entries, wip, codes, codeLabels,
         canSeeCost,
         isAdmin: isAdmin(user),
-        weekStart: null, weekDays: [], jobs: [], packages: [], today: sydneyToday(),
+        weekStart: null, weekDays: [], jobs: [], packages: jobPackages, today: sydneyToday(),
       });
     }
 
