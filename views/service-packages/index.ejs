@@ -10,7 +10,7 @@
   const today = new Date().toISOString().slice(0, 10);
 %>
 
-<%- include('../partials/page-header', {
+<%- include('../partials/page-header', { rail: true,
   eyebrow: 'Plans & Approvals',
   title: 'Service Packages',
   subtitle: 'Every discipline stream within every project — fees, hours, owners and due dates.',

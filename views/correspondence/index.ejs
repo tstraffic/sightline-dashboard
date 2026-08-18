@@ -8,7 +8,7 @@
   const isDue = (i) => i.status === 'open' && i.response_due && i.response_due <= today;
 %>
 
-<%- include('../partials/page-header', {
+<%- include('../partials/page-header', { rail: true,
   eyebrow: 'Plans & Approvals',
   title: 'Correspondence & RFIs',
   subtitle: 'Material correspondence only — RFIs, instructions, authority comments and design changes that need action.',

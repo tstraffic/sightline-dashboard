@@ -9,7 +9,7 @@
   const isOverdue = (i) => ['requested','inadequate'].includes(i.status) && i.needed_by && i.needed_by < today;
 %>
 
-<%- include('../partials/page-header', {
+<%- include('../partials/page-header', { rail: true,
   eyebrow: 'Plans & Approvals',
   title: 'Client Inputs',
   subtitle: 'Required information from clients — and the evidence trail when a delay is client-caused.',
