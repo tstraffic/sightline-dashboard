@@ -15,10 +15,22 @@
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
     <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Approval</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <%
+        // Controlled list (Settings → Approval Types). Legacy free-text
+        // values stay selectable so old records keep their wording.
+        const APPR_TYPES = (settingsOptions.approval_types || []);
+        const currentType = isEdit ? (approval.approval_type || '') : '';
+        const isLegacyType = currentType && !APPR_TYPES.some(t => t.key === currentType);
+      %>
       <div>
         <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Type <span class="text-red-500">*</span></label>
-        <input type="text" name="approval_type" required value="<%= isEdit ? approval.approval_type : '' %>" placeholder="e.g. Road Occupancy Licence, Council s138 permit"
-          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <select name="approval_type" required class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Select…</option>
+          <% APPR_TYPES.forEach(t => { %>
+            <option value="<%= t.key %>" <%= currentType === t.key ? 'selected' : '' %>><%= t.label %></option>
+          <% }) %>
+          <% if (isLegacyType) { %><option value="<%= currentType %>" selected><%= currentType %></option><% } %>
+        </select>
       </div>
       <div>
         <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Authority</label>

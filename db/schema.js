@@ -16281,6 +16281,32 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 362 error:', e.message); }
   }
 
+  // Migration 363: approval-type vocabulary. Sightline still delivers ROLs,
+  // TMPs and TGS work (brief streams CON + APR), so the Approval Register's
+  // type stops being free text and becomes an editable app_settings list —
+  // carrying over the item types the T&S Plans & Approvals module used.
+  if (!isMigrationApplied.get(363)) {
+    try {
+      const seedType = db.prepare(`
+        INSERT OR IGNORE INTO app_settings (category, key, label, color, display_order, is_active)
+        VALUES ('approval_types', ?, ?, '', ?, 1)
+      `);
+      [
+        ['rol', 'Road Occupancy Licence (ROL)'],
+        ['tmp_approval', 'TMP Approval'],
+        ['traffic_guidance', 'Traffic Guidance Scheme (TGS)'],
+        ['council_permit', 'Council Permit (s138)'],
+        ['tfnsw_submission', 'TfNSW Submission'],
+        ['spa', 'Speed Zone Authorisation (SPA)'],
+        ['sza', 'Special Zone Authorisation (SZA)'],
+        ['works_permit', 'Works / Construction Permit'],
+        ['other', 'Other'],
+      ].forEach(([key, label], i) => seedType.run(key, label, i + 1));
+      recordMigration.run(363, 'Sightline approval-type vocabulary');
+      console.log('Migration 363 applied: approval_types vocabulary seeded');
+    } catch (e) { console.error('Migration 363 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

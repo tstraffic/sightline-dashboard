@@ -51,6 +51,7 @@ const CATEGORY_META = {
   service_streams:    { label: 'Service Streams',      group: 'CRM',       icon: 'layers' },
   repeat_client_status: { label: 'Repeat Client Status', group: 'CRM',     icon: 'refresh' },
   referral_channels:  { label: 'Referral Channels',    group: 'CRM',       icon: 'share' },
+  approval_types:     { label: 'Approval Types',       group: 'Planning',  icon: 'shield' },
   contact_statuses:   { label: 'Contact Statuses',     group: 'CRM',       icon: 'user' },
   // HR categories
   hr_employment_types:    { label: 'Employment Types',    group: 'HR',  icon: 'briefcase' },

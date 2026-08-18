@@ -32,6 +32,7 @@ router.get('/', (req, res, next) => {
     const params = [];
     if (job_id) { where.push('a.job_id = ?'); params.push(job_id); }
     if (status && STATUSES.includes(status)) { where.push('a.status = ?'); params.push(status); }
+    if (req.query.approval_type) { where.push('a.approval_type = ?'); params.push(req.query.approval_type); }
     if (view === 'pending') where.push("a.status IN ('not_submitted','submitted','info_requested')");
     if (view === 'awaiting_info') where.push("a.status = 'info_requested'");
     if (view === 'due') { where.push("a.status IN ('submitted','info_requested') AND a.requested_date IS NOT NULL AND a.requested_date <= ?"); params.push(dueSoon); }
@@ -68,7 +69,7 @@ router.get('/', (req, res, next) => {
       approvals,
       stats,
       statuses: STATUSES,
-      filters: { view, job_id, status, search },
+      filters: { view, job_id, status, search, approval_type: req.query.approval_type || '' },
     });
   } catch (err) { next(err); }
 });
@@ -135,6 +136,56 @@ router.post('/', (req, res) => {
   } catch (err) {
     req.flash('error', 'Failed to create approval: ' + err.message);
     req.session.save(() => res.redirect(b.job_id ? '/approvals/new?job_id=' + b.job_id : '/approvals'));
+  }
+});
+
+// Create the approval records a project's ROL / TMP / TGS flags imply.
+// Explicit button on the project's Approvals tab — only mints the types
+// that are flagged and don't already have a record, so it's safe to
+// press twice.
+const FLAG_TO_TYPE = [
+  { flag: 'rol_required', type: 'rol', authority: '' },
+  { flag: 'tmp_required', type: 'tmp_approval', authority: '' },
+  { flag: 'tgs_required', type: 'traffic_guidance', authority: '' },
+];
+router.post('/seed-from-flags', (req, res) => {
+  const db = getDb();
+  const jobId = req.body.job_id;
+  const back = req.body.return_to || '/jobs/' + jobId + '#approvals';
+  try {
+    const job = db.prepare('SELECT id, job_number, rol_required, tmp_required, tgs_required, project_manager_id FROM jobs WHERE id = ?').get(jobId);
+    if (!job) {
+      req.flash('error', 'Project not found.');
+      return req.session.save(() => res.redirect('/approvals'));
+    }
+    const existing = new Set(db.prepare('SELECT approval_type FROM approvals WHERE job_id = ?').all(job.id).map(r => r.approval_type));
+    const created = [];
+    db.transaction(() => {
+      for (const { flag, type } of FLAG_TO_TYPE) {
+        if (!job[flag] || existing.has(type)) continue;
+        const ref = generateApprovalRef(job.job_number);
+        const result = db.prepare(`
+          INSERT INTO approvals (approval_ref, job_id, approval_type, responsible_id, status, created_by)
+          VALUES (?, ?, ?, ?, 'not_submitted', ?)
+        `).run(ref, job.id, type, job.project_manager_id || (req.session.user ? req.session.user.id : null),
+          req.session.user ? req.session.user.id : null);
+        logActivity({
+          user: req.session.user, action: 'create', entityType: 'approval',
+          entityId: result.lastInsertRowid, entityLabel: ref,
+          jobId: job.id, jobNumber: job.job_number, details: 'Created from project approval flags', ip: req.ip,
+        });
+        created.push(ref);
+      }
+    })();
+    if (!created.length) {
+      req.flash('error', 'Nothing to add — the flagged approvals already have records.');
+    } else {
+      req.flash('success', `Created ${created.length} approval record${created.length === 1 ? '' : 's'}: ${created.join(', ')}. Add the authority and submission dates when you lodge them.`);
+    }
+    req.session.save(() => res.redirect(back));
+  } catch (err) {
+    req.flash('error', 'Failed to create approvals: ' + err.message);
+    req.session.save(() => res.redirect(back));
   }
 });
 
