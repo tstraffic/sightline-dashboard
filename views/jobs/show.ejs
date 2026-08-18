@@ -1675,9 +1675,7 @@
   </div>
   <% } %>
 
-  <!-- Site Diary Tab -->
-  <% if (showTab('diary')) { %>
-  <!-- Deliverables Tab (brief §5.3) -->
+  <!-- Deliverables Tab -->
   <% if (showTab('deliverables')) { %>
   <div id="deliverables" class="tab-content">
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-4">
@@ -1978,6 +1976,8 @@
   </div>
   <% } %>
 
+  <!-- Site Diary Tab -->
+  <% if (showTab('diary')) { %>
   <div id="diary" class="tab-content">
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-lg font-semibold text-gray-900">Site Diary</h2>
