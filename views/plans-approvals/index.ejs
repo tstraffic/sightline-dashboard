@@ -1,0 +1,56 @@
+<% locals.currentPage = 'plans-approvals' %>
+<%
+  function money(v) { return '$' + Math.round(v || 0).toLocaleString('en-AU'); }
+  function hrs(v) { return (Math.round((v || 0) * 10) / 10).toLocaleString('en-AU'); }
+%>
+
+<%- include('../partials/page-header', { rail: true,
+  eyebrow: 'Delivery',
+  title: 'Plans & Approvals',
+  subtitle: 'Everything a project must clear before it\'s done — deliverables, QA, authority approvals, variations, client inputs, correspondence and time.',
+}) %>
+
+<%- include('../partials/delivery-tabs') %>
+
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+  <a href="/deliverables?due=overdue" class="stat-card <%= deliverables.overdue ? 'accent-red' : '' %> hover:ring-2 hover:ring-brand-200 transition-shadow">
+    <p class="stat-card-label">Deliverables Due</p>
+    <p class="stat-card-value <%= deliverables.overdue ? 'is-bad' : (deliverables.c ? 'is-warn' : 'is-muted') %>"><%= deliverables.c || 0 %></p>
+    <p class="stat-card-sub"><%= deliverables.overdue ? deliverables.overdue + ' overdue' : 'within 3 days' %></p>
+  </a>
+  <a href="/deliverables?qa=pending" class="stat-card hover:ring-2 hover:ring-brand-200 transition-shadow">
+    <p class="stat-card-label">Waiting in QA</p>
+    <p class="stat-card-value <%= qaWaiting ? 'is-warn' : 'is-muted' %>"><%= qaWaiting || 0 %></p>
+    <p class="stat-card-sub">prepare → check → approve</p>
+  </a>
+  <a href="/approvals?view=pending" class="stat-card hover:ring-2 hover:ring-brand-200 transition-shadow">
+    <p class="stat-card-label">Approvals Need Attention</p>
+    <p class="stat-card-value <%= approvalsCount ? 'is-warn' : 'is-muted' %>"><%= approvalsCount || 0 %></p>
+    <p class="stat-card-sub"><%= [approvals.info ? approvals.info + ' awaiting info' : '', approvals.expiring ? approvals.expiring + ' expiring' : ''].filter(Boolean).join(', ') || 'submissions & expiries' %></p>
+  </a>
+  <a href="/variations?status=submitted" class="stat-card hover:ring-2 hover:ring-brand-200 transition-shadow">
+    <p class="stat-card-label">Variations Awaiting Decision</p>
+    <p class="stat-card-value <%= variations.c ? 'is-warn' : 'is-muted' %>"><%= variations.c || 0 %></p>
+    <p class="stat-card-sub"><%= variations.value ? money(variations.value) + ' undecided' : 'scope changes' %></p>
+  </a>
+  <a href="/client-inputs?view=overdue" class="stat-card <%= inputs ? 'accent-red' : '' %> hover:ring-2 hover:ring-brand-200 transition-shadow">
+    <p class="stat-card-label">Client Inputs Overdue</p>
+    <p class="stat-card-value <%= inputs ? 'is-bad' : 'is-muted' %>"><%= inputs || 0 %></p>
+    <p class="stat-card-sub">delivery risk</p>
+  </a>
+  <a href="/correspondence?status=open" class="stat-card hover:ring-2 hover:ring-brand-200 transition-shadow">
+    <p class="stat-card-label">Open Correspondence</p>
+    <p class="stat-card-value <%= correspondence.c ? 'is-warn' : 'is-muted' %>"><%= correspondence.c || 0 %></p>
+    <p class="stat-card-sub"><%= correspondence.action_required ? correspondence.action_required + ' need action' : 'RFIs & instructions' %></p>
+  </a>
+  <a href="/service-packages?invoice_state=ready" class="stat-card hover:ring-2 hover:ring-brand-200 transition-shadow">
+    <p class="stat-card-label">Ready to Invoice</p>
+    <p class="stat-card-value <%= invoiceReady.c ? 'is-good' : 'is-muted' %>"><%= invoiceReady.c || 0 %></p>
+    <p class="stat-card-sub"><%= invoiceReady.value ? money(invoiceReady.value) : 'queued packages' %></p>
+  </a>
+  <a href="/time" class="stat-card hover:ring-2 hover:ring-brand-200 transition-shadow">
+    <p class="stat-card-label">My Hours This Week</p>
+    <p class="stat-card-value <%= myTime.hours ? 'is-info' : 'is-muted' %>"><%= hrs(myTime.hours) %>h</p>
+    <p class="stat-card-sub"><%= hrs(myTime.billable) %>h billable</p>
+  </a>
+</div>

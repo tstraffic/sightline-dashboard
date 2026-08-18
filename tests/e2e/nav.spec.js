@@ -42,11 +42,16 @@ test('Sightline destinations render; T&S modules are delisted', async ({ page })
   // Scope to .sidebar-link — the sidebar logo is also an <a href="/dashboard">.
   const sb = (href) => page.locator(`#sidebar a.sidebar-link[href="${href}"]`);
 
-  // CRM + Delivery + Money links render exactly once.
+  // CRM + Delivery + Money links render exactly once. The delivery registers
+  // are consolidated behind the single Plans & Approvals hub entry.
   for (const href of ['/clients', '/contacts', '/opportunities/pipeline', '/opportunities',
-    '/crm', '/crm/activities', '/crm/meetings', '/projects', '/service-packages',
-    '/deliverables', '/approvals', '/variations', '/time', '/budgets']) {
+    '/crm', '/crm/activities', '/crm/meetings', '/projects', '/plans-approvals', '/budgets']) {
     await expect(sb(href)).toHaveCount(1);
+  }
+
+  // The old per-register links are tabs inside the hub now — not sidebar links.
+  for (const href of ['/service-packages', '/deliverables', '/approvals', '/variations', '/time']) {
+    await expect(sb(href)).toHaveCount(0);
   }
 
   // Hidden T&S modules must NOT appear even for admin.
@@ -60,6 +65,17 @@ test('Sightline destinations render; T&S modules are delisted', async ({ page })
   for (const href of ['/dashboard', '/tasks', '/notes', '/meetings']) {
     await expect(sb(href)).toHaveCount(1);
   }
+});
+
+test('Plans & Approvals hub carries the register tab strip', async ({ page }) => {
+  await loginAs(page);
+  await page.goto('/plans-approvals');
+  const strip = page.locator('nav[aria-label="Plans & Approvals"]');
+  await expect(strip.locator('a')).toHaveCount(8);
+  await expect(strip.locator('a.bg-white')).toHaveText('Overview');
+  // Register pages keep their URLs and show the strip with their pill active.
+  await page.goto('/deliverables');
+  await expect(page.locator('nav[aria-label="Plans & Approvals"] a.bg-white')).toHaveText('Deliverables');
 });
 
 test('planning role sees the CRM section (crm permission widened)', async ({ page }) => {

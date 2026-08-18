@@ -24,6 +24,7 @@ const PAGES = [
   '/crm/meetings',
   // Delivery
   '/projects',
+  '/plans-approvals',
   '/jobs',
   '/service-packages',
   '/deliverables',

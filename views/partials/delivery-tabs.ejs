@@ -1,0 +1,28 @@
+<%
+/* Plans & Approvals switcher — one strip across the delivery registers so a
+   single sidebar "Plans & Approvals" entry reaches them all (clone of
+   report-tabs.ejs). Active state from currentPage; canAccess comes through
+   res.locals. Include on register INDEX pages only — never above a form or
+   the deliverable show page, where a nav strip invites data loss. */
+  var __paTabs = [
+    { key: 'plans-approvals',  href: '/plans-approvals',  label: 'Overview',       permKey: 'projects' },
+    { key: 'service-packages', href: '/service-packages', label: 'Packages',       permKey: 'projects' },
+    { key: 'deliverables',     href: '/deliverables',     label: 'Deliverables',   permKey: 'projects' },
+    { key: 'approvals',        href: '/approvals',        label: 'Approvals',      permKey: 'projects' },
+    { key: 'variations',       href: '/variations',       label: 'Variations',     permKey: 'projects' },
+    { key: 'client-inputs',    href: '/client-inputs',    label: 'Client Inputs',  permKey: 'projects' },
+    { key: 'correspondence',   href: '/correspondence',   label: 'Correspondence', permKey: 'projects' },
+    { key: 'time',             href: '/time',             label: 'Time',           permKey: 'projects' },
+  ].filter(function (t) { return canAccess(user, t.permKey); });
+  var __paActive = (typeof currentPage !== 'undefined') ? currentPage : '';
+%>
+<% if (__paTabs.length > 1) { %>
+<nav class="inline-flex items-center bg-gray-100 border border-gray-200 rounded-xl p-1 gap-0.5 mb-4 overflow-x-auto max-w-full" aria-label="Plans & Approvals">
+  <% __paTabs.forEach(function (t) { var on = __paActive === t.key; %>
+    <a href="<%= t.href %>"
+       class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors <%= on ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-white/60' %>">
+      <%= t.label %>
+    </a>
+  <% }); %>
+</nav>
+<% } %>
